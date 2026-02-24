@@ -2,15 +2,15 @@ import Head from 'next/head';
 import { useState, useCallback, useMemo } from 'react';
 import { categories, products } from '../lib/products';
 
-const WA_NUMBER = process.env.NEXT_PUBLIC_WHATSAPP_NUMBER || '49170123456';
-const STORE_NAME = process.env.NEXT_PUBLIC_STORE_NAME || 'GreenHarvest';
-const LANGS = ['DE', 'EN', 'AR', 'FR'];
+const WA_NUMBER  = process.env.NEXT_PUBLIC_WHATSAPP_NUMBER || '49170123456';
+const STORE_NAME = process.env.NEXT_PUBLIC_STORE_NAME      || 'GreenHarvest';
+const LANGS      = ['DE', 'EN', 'AR', 'FR'];
 
 /* ─── Stars ─────────────────────────────────────────────────────── */
 function Stars({ rating }) {
   return (
     <div style={{ display: 'flex', gap: 2 }}>
-      {[1, 2, 3, 4, 5].map(i => {
+      {[1,2,3,4,5].map(i => {
         const full = i <= Math.floor(rating);
         const half = !full && i - 0.5 <= rating;
         return (
@@ -25,18 +25,18 @@ function Stars({ rating }) {
 function WaIcon({ size = 18 }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor">
-      <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z" />
+      <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
     </svg>
   );
 }
 
 /* ─── Page ───────────────────────────────────────────────────────── */
 export default function Home() {
-  const [activeCat, setActiveCat] = useState('all');
-  const [search, setSearch] = useState('');
-  const [cart, setCart] = useState({});
-  const [panelStep, setPanelStep] = useState('summary'); // 'summary' | 'form' | 'success'
-  const [langIdx, setLangIdx] = useState(0);
+  const [activeCat,  setActiveCat]  = useState('all');
+  const [search,     setSearch]     = useState('');
+  const [cart,       setCart]       = useState({});
+  const [panelStep,  setPanelStep]  = useState('summary'); // 'summary' | 'form' | 'success'
+  const [langIdx,    setLangIdx]    = useState(0);
   const [submitting, setSubmitting] = useState(false);
   const [form, setForm] = useState({ name: '', phone: '', address: '', notes: '' });
   const [errors, setErrors] = useState({});
@@ -52,7 +52,7 @@ export default function Home() {
   }, [activeCat, search]);
 
   const cartEntries = useMemo(
-    () => Object.entries(cart).filter(([, q]) => q > 0).map(([id, qty]) => ({
+    () => Object.entries(cart).filter(([,q]) => q > 0).map(([id, qty]) => ({
       ...products.find(p => p.id === id), qty,
     })),
     [cart]
@@ -77,8 +77,8 @@ export default function Home() {
   /* ── submit ── */
   const validate = () => {
     const e = {};
-    if (!form.name.trim()) e.name = 'Required';
-    if (!form.phone.trim()) e.phone = 'Required';
+    if (!form.name.trim())    e.name    = 'Required';
+    if (!form.phone.trim())   e.phone   = 'Required';
     if (!form.address.trim()) e.address = 'Required';
     setErrors(e);
     return !Object.keys(e).length;
@@ -90,7 +90,7 @@ export default function Home() {
     try {
       // POST to our secure server-side API route — browser never touches Firebase
       const res = await fetch('/api/order', {
-        method: 'POST',
+        method:  'POST',
         headers: {
           'Content-Type': 'application/json',
           // Secret header — server rejects requests without this
@@ -98,7 +98,7 @@ export default function Home() {
         },
         body: JSON.stringify({
           customer: { ...form },
-          items: cartEntries.map(i => ({ id: i.id, qty: i.qty })),
+          items:    cartEntries.map(i => ({ id: i.id, qty: i.qty })),
           // NOTE: we do NOT send prices — the server looks them up itself
         }),
       });
@@ -546,10 +546,10 @@ export default function Home() {
 
                     {/* Fields */}
                     {[
-                      { key: 'name', label: 'Full Name *', type: 'text', ph: 'Your full name' },
-                      { key: 'phone', label: 'Phone Number *', type: 'tel', ph: '+49 170 1234567' },
+                      { key: 'name',    label: 'Full Name *',        type: 'text', ph: 'Your full name' },
+                      { key: 'phone',   label: 'Phone Number *',     type: 'tel',  ph: '+49 170 1234567' },
                       { key: 'address', label: 'Delivery Address *', type: 'area', ph: 'Street, City, ZIP' },
-                      { key: 'notes', label: 'Notes (optional)', type: 'text', ph: 'Special requests?' },
+                      { key: 'notes',   label: 'Notes (optional)',    type: 'text', ph: 'Special requests?' },
                     ].map(f => (
                       <div key={f.key} style={{ marginBottom: 13 }}>
                         <label style={{ display: 'block', fontSize: 11, fontWeight: 800, color: '#8A8478', marginBottom: 5, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
