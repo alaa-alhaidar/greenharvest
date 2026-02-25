@@ -404,8 +404,8 @@ function doLogin() {
         input.value = '';
         input.classList.add('error');
         document.getElementById('login-error-msg').textContent =
-          res.status === 403 ? 'Incorrect password. Please try again.'
-                             : 'Server error. Check ADMIN_SECRET is set on Vercel.';
+        res.status === 403 ? 'Incorrect password. Please try again.'
+                     : 'Server error. Check Firebase credentials in Vercel.';
         err.classList.add('show');
         setTimeout(function(){input.classList.remove('error');}, 500);
         btn.classList.remove('loading');
