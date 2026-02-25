@@ -13,7 +13,7 @@ export default async function handler(req, res) {
   }
 
   // Check admin secret
-  const secret = "admin123"; //process.env.ADMIN_SECRET
+  const secret = "process.env.ADMIN_SECRET"; //process.env.ADMIN_SECRET
   if (!secret || req.headers['x-admin-secret'] !== secret) {
     return res.status(403).json({ error: 'Forbidden' });
   }
