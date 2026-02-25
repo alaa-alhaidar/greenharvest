@@ -13,9 +13,17 @@ export default async function handler(req, res) {
   }
 
   // Check admin secret
-  const secret = "process.env.ADMIN_SECRET"; //process.env.ADMIN_SECRET
-  if (!secret || req.headers['x-admin-secret'] !== secret) {
-    return res.status(403).json({ error: 'Forbidden' });
+  // Check admin secret
+  const secret = process.env.ADMIN_SECRET; // ✅ no quotes
+
+  if (!secret) {
+    return res.status(500).json({ error: "ADMIN_SECRET not set" });
+  }
+
+  const headerSecret = req.headers["x-admin-secret"]; // can be string | string[]
+
+  if (Array.isArray(headerSecret) || headerSecret !== secret) {
+    return res.status(403).json({ error: "Forbidden" });
   }
 
   const { orderId, status } = req.body || {};
