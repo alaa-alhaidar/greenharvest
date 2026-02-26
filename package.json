@@ -12,7 +12,9 @@
     "next": "14.2.3",
     "react": "^18",
     "react-dom": "^18",
-    "firebase-admin": "^12.1.0"
+    "firebase-admin": "^12.1.0",
+    "@google-cloud/firestore": "^7.1.0",
+    "@opentelemetry/api": "^1.8.0"
   },
   "devDependencies": {
     "@types/node": "^20",
@@ -21,4 +23,5 @@
     "eslint": "^8",
     "eslint-config-next": "14.2.3"
   }
+  
 }
