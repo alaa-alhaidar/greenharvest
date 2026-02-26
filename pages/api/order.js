@@ -3,7 +3,7 @@
 // Protected by ADMIN_SECRET env var.
 // UPDATED: Removed orderBy to fix potential index issues
 
-import { db } from '../../../lib/firebase-admin';
+import { db } from '../../../../lib/firebase-admin';
 
 export default async function handler(req, res) {
   // Only GET
