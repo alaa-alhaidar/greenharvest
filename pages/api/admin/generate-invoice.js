@@ -1,12 +1,6 @@
-// pages/api/admin/generate-invoice.js
-// Generates a PDF invoice with professional logo + correct Arabic RTL rendering
+ // pages/api/admin/generate-invoice.js
+// Generates a PDF invoice with professional logo and correct Arabic (RTL + shaping)
 // Protected by ADMIN_SECRET env var.
-//
-// Requires:
-//   npm i bidi-js arabic-text-shaper
-// And font files placed at:
-//   /public/fonts/Amiri-Regular.ttf
-//   /public/fonts/Amiri-Bold.ttf
 
 import { db } from '../../../lib/firebase-admin';
 import PDFDocument from 'pdfkit';
@@ -27,37 +21,44 @@ export default async function handler(req, res) {
     return res.status(422).json({ error: 'Invalid order ID' });
   }
 
-  // Lazy-require (keeps Next/Vercel bundling happier)
-  let bidi;
-  let arabicShaper;
+  // ---------- Arabic RTL helpers (never crash) ----------
+  let rtl = (s) => String(s || '');
+  let hasArabicSupport = false;
+
   try {
-    const bidiFactory = require('bidi-js');
-    bidi = typeof bidiFactory === 'function' ? bidiFactory() : bidiFactory;
-    arabicShaper = require('arabic-text-shaper');
-  } catch (e) {
-    console.error('Missing Arabic shaping deps:', e);
-    return res.status(500).json({
-      error: 'Missing dependencies for Arabic rendering',
-      details: 'Run: npm i bidi-js arabic-text-shaper',
-    });
-  }
+    // bidi-js can be either a factory fn or module with a default
+    const bidiMod = require('bidi-js');
+    const bidiFactory =
+      (typeof bidiMod === 'function' && bidiMod) ||
+      (typeof bidiMod?.default === 'function' && bidiMod.default) ||
+      null;
 
-  // RTL helper: Arabic shaping + BiDi reordering
-  function rtl(str) {
-    if (!str) return '';
-    try {
-      const shaped = arabicShaper.reshape(String(str));
-      // bidi-js API: fromString().writeReordered() is the common usage
-      return bidi.fromString(shaped).writeReordered();
-    } catch {
-      return String(str);
+    const bidi = bidiFactory ? bidiFactory() : null;
+
+    // arabic-text-shaper export shape differs across builds
+    const shaperMod = require('arabic-text-shaper');
+    const reshapeFn =
+      shaperMod?.reshape ||
+      shaperMod?.default?.reshape ||
+      (typeof shaperMod === 'function' ? shaperMod : null);
+
+    if (bidi && typeof bidi.fromString === 'function' && typeof reshapeFn === 'function') {
+      rtl = (s) => {
+        const raw = String(s || '');
+        const shaped = reshapeFn(raw);
+        // writeReordered gives visually-correct string for PDFKit
+        return bidi.fromString(shaped).writeReordered();
+      };
+      hasArabicSupport = true;
     }
+  } catch (e) {
+    // deps missing or incompatible -> keep fallback rtl() that won't crash
+    console.warn('Arabic shaping not enabled:', e?.message || e);
   }
 
-  // Font paths (embedded)
+  // ---------- Fonts (never crash) ----------
   const fontRegularPath = path.join(process.cwd(), 'public', 'fonts', 'Amiri-Regular.ttf');
   const fontBoldPath = path.join(process.cwd(), 'public', 'fonts', 'Amiri-Bold.ttf');
-
   const hasArabicFonts = fs.existsSync(fontRegularPath) && fs.existsSync(fontBoldPath);
 
   try {
@@ -92,20 +93,19 @@ export default async function handler(req, res) {
       compress: true,
     });
 
-    // Register Arabic fonts (if present)
+    // Register Arabic fonts if present
     if (hasArabicFonts) {
       pdfDoc.registerFont('Amiri', fontRegularPath);
       pdfDoc.registerFont('Amiri-Bold', fontBoldPath);
     }
 
-    // Set response headers
+    // Response headers
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader(
       'Content-Disposition',
-      `attachment; filename="MawasemAlKhair-Invoice-${doc.id.slice(-6).toUpperCase()}.pdf"`
+      `attachment; filename="Invoice-${doc.id.slice(-6).toUpperCase()}.pdf"`
     );
 
-    // Pipe PDF to response
     pdfDoc.pipe(res);
 
     // Colors
@@ -122,19 +122,16 @@ export default async function handler(req, res) {
     const logoY = 45;
     const logoSize = 70;
 
-    // Main circular logo background
     pdfDoc
       .circle(logoX + logoSize / 2, logoY + logoSize / 2, logoSize / 2)
       .fillColor(greenDark)
       .fill();
 
-    // Inner circle
     pdfDoc
       .circle(logoX + logoSize / 2, logoY + logoSize / 2, logoSize / 2 - 5)
       .fillColor(greenMid)
       .fill();
 
-    // Leaf stem
     pdfDoc
       .moveTo(logoX + logoSize / 2, logoY + logoSize / 2 + 15)
       .lineTo(logoX + logoSize / 2, logoY + logoSize / 2 - 20)
@@ -142,8 +139,7 @@ export default async function handler(req, res) {
       .lineWidth(3)
       .stroke();
 
-    // Leaf (right)
-    pdfDoc.save();
+    // leaf right
     pdfDoc
       .moveTo(logoX + logoSize / 2, logoY + logoSize / 2 - 20)
       .bezierCurveTo(
@@ -156,10 +152,8 @@ export default async function handler(req, res) {
       )
       .fillColor('white')
       .fill();
-    pdfDoc.restore();
 
-    // Leaf (left)
-    pdfDoc.save();
+    // leaf left
     pdfDoc
       .moveTo(logoX + logoSize / 2, logoY + logoSize / 2 - 20)
       .bezierCurveTo(
@@ -172,9 +166,8 @@ export default async function handler(req, res) {
       )
       .fillColor('white')
       .fill();
-    pdfDoc.restore();
 
-    // Decorative dots
+    // dots
     const dots = 8;
     for (let i = 0; i < dots; i++) {
       const angle = (i / dots) * Math.PI * 2;
@@ -183,40 +176,25 @@ export default async function handler(req, res) {
       pdfDoc.circle(dotX, dotY, 2).fillColor(greenLight).fill();
     }
 
-    // ===== BRAND NAME (Arabic primary) =====
+    // ===== BRAND NAME =====
     const textX = logoX + logoSize + 20;
 
-    // Arabic brand (مواسم الخير) — correct RTL shaping
-    if (hasArabicFonts) {
-      pdfDoc
-        .fontSize(26)
-        .fillColor(greenDark)
-        .font('Amiri-Bold')
-        .text(rtl('مواسم الخير'), textX, logoY + 6, { width: 475 - (textX - 50), align: 'left' });
-
-      // Optional English small (kept subtle)
-      pdfDoc
-        .fontSize(11)
-        .fillColor(greenMid)
-        .font('Helvetica-Bold')
-        .text('Mawasem Alkhair', textX, logoY + 42);
+    // Arabic brand: مواسم الخير
+    // Only render Arabic using Arabic fonts + shaping; otherwise show transliteration to avoid broken output.
+    if (hasArabicFonts && hasArabicSupport) {
+      pdfDoc.font('Amiri-Bold').fontSize(26).fillColor(greenDark).text(rtl('مواسم الخير'), textX, logoY + 6);
+      pdfDoc.font('Helvetica-Bold').fontSize(11).fillColor(greenMid).text('Mawasem Alkhair', textX, logoY + 42);
     } else {
-      // Fallback if fonts missing (Arabic may still not render correctly)
-      pdfDoc
-        .fontSize(22)
-        .fillColor(greenDark)
-        .font('Helvetica-Bold')
-        .text('Mawasem Alkhair', textX, logoY + 10);
+      pdfDoc.font('Helvetica-Bold').fontSize(22).fillColor(greenDark).text('Mawasem Alkhair', textX, logoY + 12);
     }
 
-    // Tagline
     pdfDoc
       .fontSize(9)
       .fillColor(greenLight)
       .font('Helvetica')
       .text('Organic Products & Natural Foods', textX, logoY + 62);
 
-    // Decorative line
+    // line
     const lineY = logoY + logoSize + 15;
     for (let i = 0; i < 3; i++) {
       const opacity = 0.3 - i * 0.1;
@@ -238,7 +216,6 @@ export default async function handler(req, res) {
     pdfDoc.fontSize(20).fillColor(greenDark).font('Helvetica-Bold').text('INVOICE', 65, yPos + 15);
 
     pdfDoc.roundedRect(380, yPos + 12, 150, 30, 6).fillColor(gold).fill();
-
     pdfDoc
       .fontSize(18)
       .fillColor('white')
@@ -250,23 +227,13 @@ export default async function handler(req, res) {
       .fillColor(gray)
       .font('Helvetica')
       .text(
-        `📅 ${orderDate.toLocaleDateString('en-GB', {
-          day: '2-digit',
-          month: 'short',
-          year: 'numeric',
-        })}`,
+        `📅 ${orderDate.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}`,
         380,
         yPos + 50,
         { width: 150, align: 'center' }
       );
 
-    const statusEmoji = {
-      new: '🆕',
-      confirmed: '✅',
-      preparing: '👨‍🍳',
-      delivered: '📦',
-      cancelled: '❌',
-    };
+    const statusEmoji = { new: '🆕', confirmed: '✅', preparing: '👨‍🍳', delivered: '📦', cancelled: '❌' };
     const statusText = (data.status || 'new').toLowerCase();
     const emoji = statusEmoji[statusText] || '📋';
 
@@ -288,39 +255,18 @@ export default async function handler(req, res) {
 
     const detailsY = yPos + 15;
 
-    pdfDoc
-      .fontSize(10)
-      .fillColor(greenDark)
-      .font('Helvetica-Bold')
-      .text('Name:', 65, detailsY)
-      .fillColor(gray)
-      .font('Helvetica')
-      .text(customer.name, 120, detailsY);
+    pdfDoc.fontSize(10).fillColor(greenDark).font('Helvetica-Bold').text('Name:', 65, detailsY);
+    pdfDoc.fillColor(gray).font('Helvetica').text(customer.name, 120, detailsY);
 
-    pdfDoc
-      .fillColor(greenDark)
-      .font('Helvetica-Bold')
-      .text('Phone:', 65, detailsY + 18)
-      .fillColor(gray)
-      .font('Helvetica')
-      .text(customer.phone, 120, detailsY + 18);
+    pdfDoc.fillColor(greenDark).font('Helvetica-Bold').text('Phone:', 65, detailsY + 18);
+    pdfDoc.fillColor(gray).font('Helvetica').text(customer.phone, 120, detailsY + 18);
 
-    pdfDoc
-      .fillColor(greenDark)
-      .font('Helvetica-Bold')
-      .text('Address:', 65, detailsY + 36)
-      .fillColor(gray)
-      .font('Helvetica')
-      .text(customer.address, 120, detailsY + 36, { width: 410 });
+    pdfDoc.fillColor(greenDark).font('Helvetica-Bold').text('Address:', 65, detailsY + 36);
+    pdfDoc.fillColor(gray).font('Helvetica').text(customer.address, 120, detailsY + 36, { width: 410 });
 
     if (customer.notes) {
-      pdfDoc
-        .fillColor(greenDark)
-        .font('Helvetica-Bold')
-        .text('Notes:', 65, detailsY + 54)
-        .fillColor(gray)
-        .font('Helvetica')
-        .text(customer.notes, 120, detailsY + 54, { width: 410 });
+      pdfDoc.fillColor(greenDark).font('Helvetica-Bold').text('Notes:', 65, detailsY + 54);
+      pdfDoc.fillColor(gray).font('Helvetica').text(customer.notes, 120, detailsY + 54, { width: 410 });
     }
 
     yPos += customer.notes ? 110 : 90;
@@ -328,18 +274,15 @@ export default async function handler(req, res) {
     // ===== ITEMS TABLE =====
     pdfDoc.roundedRect(50, yPos, 495, 32, 8).fillColor(greenDark).fill();
     pdfDoc.fontSize(13).fillColor('white').font('Helvetica-Bold').text('📦 Order Items', 65, yPos + 10);
-
     yPos += 42;
 
-    pdfDoc.fontSize(11).fillColor('white').font('Helvetica-Bold');
     pdfDoc.roundedRect(50, yPos, 495, 28, 6).fillColor(greenMid).fill();
-
+    pdfDoc.fontSize(11).fillColor('white').font('Helvetica-Bold');
     pdfDoc
       .text('Item', 60, yPos + 9)
       .text('Qty', 320, yPos + 9, { width: 40, align: 'right' })
       .text('Unit Price', 370, yPos + 9, { width: 70, align: 'right' })
       .text('Total', 450, yPos + 9, { width: 85, align: 'right' });
-
     yPos += 28;
 
     pdfDoc.fontSize(10).fillColor(gray).font('Helvetica');
@@ -368,10 +311,9 @@ export default async function handler(req, res) {
 
     // ===== TOTALS =====
     yPos += 20;
-    const total =
-      typeof data.total === 'number'
-        ? data.total
-        : items.reduce((s, it) => s + Number(it.price || 0) * Number(it.qty || 0), 0);
+
+    const computedTotal = items.reduce((s, it) => s + Number(it.price || 0) * Number(it.qty || 0), 0);
+    const total = typeof data.total === 'number' ? data.total : computedTotal;
 
     pdfDoc.roundedRect(340, yPos, 205, 90, 10).fillColor('#F8F6F1').fill();
 
@@ -387,7 +329,6 @@ export default async function handler(req, res) {
       .text('€0.00', 450, yPos + 35, { width: 85, align: 'right' });
 
     pdfDoc.roundedRect(350, yPos + 55, 185, 28, 6).fillColor(greenDark).fill();
-
     pdfDoc
       .fontSize(14)
       .fillColor('white')
@@ -416,19 +357,12 @@ export default async function handler(req, res) {
 
     yPos += 50;
 
-    // Arabic thank-you (correct RTL shaping)
-    if (hasArabicFonts) {
+    if (hasArabicFonts && hasArabicSupport) {
       pdfDoc
         .fontSize(14)
         .fillColor(greenDark)
         .font('Amiri-Bold')
         .text(rtl('شكراً لاختياركم مواسم الخير! 🌿'), 50, yPos, { align: 'center', width: 495 });
-    } else {
-      pdfDoc
-        .fontSize(12)
-        .fillColor(greenDark)
-        .font('Helvetica-Bold')
-        .text('Thank you!', 50, yPos, { align: 'center', width: 495 });
     }
 
     yPos += 22;
@@ -453,7 +387,7 @@ export default async function handler(req, res) {
     if (!res.headersSent) {
       return res.status(500).json({
         error: 'Failed to generate invoice',
-        details: err.message,
+        details: err?.message || String(err),
       });
     }
   }
