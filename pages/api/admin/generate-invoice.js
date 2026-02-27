@@ -1,12 +1,6 @@
-// pages/api/admin/generate-invoice.js
-// Generates a PDF invoice with Arabic brand: مواسم الخير (RTL + shaping) + leaf logo image
-// Protected by ADMIN_SECRET env var.
-//
-// REQUIREMENTS:
-//   npm i bidi-js arabic-text-shaper
-//   public/fonts/Amiri-Regular.ttf
-//   public/fonts/Amiri-Bold.ttf
-//   public/brand/leaf.png
+ // pages/api/admin/generate-invoice.js
+// PDF invoice with Arabic brand (مواسم الخير) + leaf logo image
+// Works on Vercel by loading assets from FS or via URL fallback.
 
 import { db } from '../../../lib/firebase-admin';
 import PDFDocument from 'pdfkit';
@@ -26,7 +20,12 @@ export default async function handler(req, res) {
     return res.status(422).json({ error: 'Invalid order ID' });
   }
 
-  // ---------------- Arabic shaping (never crash) ----------------
+  // ---------- Origin for URL fallback ----------
+  const proto = (req.headers['x-forwarded-proto'] || 'https').toString();
+  const host = (req.headers['x-forwarded-host'] || req.headers.host || '').toString();
+  const origin = host ? `${proto}://${host}` : '';
+
+  // ---------- Arabic shaping ----------
   let rtl = (s) => String(s ?? '');
   let hasArabicSupport = false;
 
@@ -38,11 +37,11 @@ export default async function handler(req, res) {
       null;
     const bidi = bidiFactory ? bidiFactory() : null;
 
-    const shaperMod = require('arabic-text-shaper');
+    const reshaper = require('arabic-persian-reshaper');
     const reshapeFn =
-      shaperMod?.reshape ||
-      shaperMod?.default?.reshape ||
-      (typeof shaperMod === 'function' ? shaperMod : null);
+      reshaper?.reshape ||
+      reshaper?.default?.reshape ||
+      (typeof reshaper === 'function' ? reshaper : null);
 
     if (bidi && typeof bidi.fromString === 'function' && typeof reshapeFn === 'function') {
       rtl = (s) => {
@@ -53,23 +52,36 @@ export default async function handler(req, res) {
       hasArabicSupport = true;
     }
   } catch (e) {
-    // If deps are missing, PDF will still generate — Arabic will fallback to English.
     console.warn('Arabic shaping disabled:', e?.message || e);
   }
 
-  // ---------------- Fonts + Logo paths ----------------
-  const fontRegularPath = path.join(process.cwd(), 'public', 'fonts', 'Amiri-Regular.ttf');
-  const fontBoldPath = path.join(process.cwd(), 'public', 'fonts', 'Amiri-Bold.ttf');
-  const hasArabicFonts = fs.existsSync(fontRegularPath) && fs.existsSync(fontBoldPath);
+  // ---------- Helper: load file from FS or from URL ----------
+  async function loadBuffer(fsPath, urlPath) {
+    try {
+      if (fs.existsSync(fsPath)) return fs.readFileSync(fsPath);
+    } catch (_) {}
 
-  const leafLogoPath = path.join(process.cwd(), 'public', 'brand', 'leaf.png');
-  const hasLeafLogo = fs.existsSync(leafLogoPath);
+    if (!origin) return null;
+
+    try {
+      const r = await fetch(origin + urlPath);
+      if (!r.ok) return null;
+      const ab = await r.arrayBuffer();
+      return Buffer.from(ab);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  // Asset locations (expected)
+  const amiriRegFs = path.join(process.cwd(), 'public', 'fonts', 'Amiri-Regular.ttf');
+  const amiriBoldFs = path.join(process.cwd(), 'public', 'fonts', 'Amiri-Bold.ttf');
+  const leafFs = path.join(process.cwd(), 'public', 'brand', 'leaf.png');
 
   try {
-    // Fetch order
+    // Fetch order from Firestore
     const doc = await db.collection('orders').doc(orderId).get();
     if (!doc.exists) return res.status(404).json({ error: 'Order not found' });
-
     const data = doc.data();
 
     const customer = {
@@ -89,6 +101,21 @@ export default async function handler(req, res) {
     const orderDate =
       data.createdAt?.toDate?.() || (data.timestamp ? new Date(data.timestamp) : new Date());
 
+    // Load assets
+    const [amiriRegBuf, amiriBoldBuf, leafBuf] = await Promise.all([
+      loadBuffer(amiriRegFs, '/fonts/Amiri-Regular.ttf'),
+      loadBuffer(amiriBoldFs, '/fonts/Amiri-Bold.ttf'),
+      loadBuffer(leafFs, '/brand/leaf.png'),
+    ]);
+
+    const hasArabicFonts = !!(amiriRegBuf && amiriBoldBuf);
+    const hasLeafLogo = !!leafBuf;
+
+    console.log('[invoice] origin:', origin);
+    console.log('[invoice] arabicSupport:', hasArabicSupport);
+    console.log('[invoice] arabicFonts:', hasArabicFonts);
+    console.log('[invoice] leafLogo:', hasLeafLogo);
+
     // Create PDF
     const pdfDoc = new PDFDocument({
       size: 'A4',
@@ -96,13 +123,13 @@ export default async function handler(req, res) {
       compress: true,
     });
 
-    // Register Arabic fonts
+    // Register fonts from buffers (works even when FS paths not bundled)
     if (hasArabicFonts) {
-      pdfDoc.registerFont('Amiri', fontRegularPath);
-      pdfDoc.registerFont('Amiri-Bold', fontBoldPath);
+      pdfDoc.registerFont('Amiri', amiriRegBuf);
+      pdfDoc.registerFont('Amiri-Bold', amiriBoldBuf);
     }
 
-    // Headers
+    // Response headers
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader(
       'Content-Disposition',
@@ -120,38 +147,37 @@ export default async function handler(req, res) {
     const gray = '#4A4A4A';
     const lightGray = '#8A8A8A';
 
-    // ===== HEADER: LOGO + ARABIC BRAND =====
+    // ===== LOGO CIRCLE =====
     const logoX = 50;
     const logoY = 45;
     const logoSize = 70;
 
-    // Circle background
     pdfDoc
       .circle(logoX + logoSize / 2, logoY + logoSize / 2, logoSize / 2)
       .fillColor(greenDark)
       .fill();
+
     pdfDoc
       .circle(logoX + logoSize / 2, logoY + logoSize / 2, logoSize / 2 - 5)
       .fillColor(greenMid)
       .fill();
 
-    // Put leaf image INSIDE the circle (if exists), otherwise keep a simple white stem
+    // Leaf inside circle (buffer)
     if (hasLeafLogo) {
-      // Clip to circle
       pdfDoc.save();
       pdfDoc
         .circle(logoX + logoSize / 2, logoY + logoSize / 2, logoSize / 2 - 8)
         .clip();
 
-      // Center image nicely
-      const imgPad = 12;
-      pdfDoc.image(leafLogoPath, logoX + imgPad, logoY + imgPad, {
-        fit: [logoSize - imgPad * 2, logoSize - imgPad * 2],
+      const pad = 12;
+      pdfDoc.image(leafBuf, logoX + pad, logoY + pad, {
+        fit: [logoSize - pad * 2, logoSize - pad * 2],
         align: 'center',
         valign: 'center',
       });
       pdfDoc.restore();
     } else {
+      // fallback mark so you notice it's missing
       pdfDoc
         .moveTo(logoX + logoSize / 2, logoY + logoSize / 2 + 15)
         .lineTo(logoX + logoSize / 2, logoY + logoSize / 2 - 20)
@@ -160,7 +186,7 @@ export default async function handler(req, res) {
         .stroke();
     }
 
-    // Decorative dots
+    // Dots
     const dots = 8;
     for (let i = 0; i < dots; i++) {
       const angle = (i / dots) * Math.PI * 2;
@@ -169,15 +195,15 @@ export default async function handler(req, res) {
       pdfDoc.circle(dotX, dotY, 2).fillColor(greenLight).fill();
     }
 
-    // Brand text: Arabic ONLY (مواسم الخير)
+    // ===== BRAND TEXT (Arabic required) =====
     const textX = logoX + logoSize + 20;
 
     if (hasArabicFonts && hasArabicSupport) {
       pdfDoc
         .font('Amiri-Bold')
-        .fontSize(28)
+        .fontSize(30)
         .fillColor(greenDark)
-        .text(rtl('مواسم الخير'), textX, logoY + 8);
+        .text(rtl('مواسم الخير'), textX, logoY + 6);
 
       pdfDoc
         .font('Amiri')
@@ -185,18 +211,19 @@ export default async function handler(req, res) {
         .fillColor(greenMid)
         .text(rtl('منتجات عضوية وأطعمة طبيعية'), textX, logoY + 44);
     } else {
-      // Safe fallback (so generation never fails)
+      // If this appears, your fonts/shaping still aren't loading.
       pdfDoc
         .font('Helvetica-Bold')
-        .fontSize(22)
+        .fontSize(16)
         .fillColor(greenDark)
-        .text('Mawasem Alkhair', textX, logoY + 12);
-
+        .text('MISSING ARABIC FONTS/SHAPING', textX, logoY + 10);
       pdfDoc
         .font('Helvetica')
-        .fontSize(9)
-        .fillColor(greenLight)
-        .text('Organic Products & Natural Foods', textX, logoY + 42);
+        .fontSize(10)
+        .fillColor(greenMid)
+        .text('Add public/fonts/Amiri-*.ttf + install bidi-js + arabic-persian-reshaper', textX, logoY + 32, {
+          width: 360,
+        });
     }
 
     // Decorative line
@@ -213,15 +240,13 @@ export default async function handler(req, res) {
     }
     pdfDoc.opacity(1);
 
+    // ===== Rest of invoice (same as before) =====
     let yPos = lineY + 25;
 
-    // ===== INVOICE INFO BOX =====
     pdfDoc.roundedRect(50, yPos, 495, 65, 10).fillColor('#F8F6F1').fill();
-
     pdfDoc.fontSize(20).fillColor(greenDark).font('Helvetica-Bold').text('INVOICE', 65, yPos + 15);
 
     pdfDoc.roundedRect(380, yPos + 12, 150, 30, 6).fillColor(gold).fill();
-
     pdfDoc
       .fontSize(18)
       .fillColor('white')
@@ -246,7 +271,7 @@ export default async function handler(req, res) {
 
     yPos += 85;
 
-    // ===== CUSTOMER SECTION =====
+    // Customer section
     pdfDoc.roundedRect(50, yPos, 495, 32, 8).fillColor(greenDark).fill();
     pdfDoc.fontSize(13).fillColor('white').font('Helvetica-Bold').text('👤 Bill To', 65, yPos + 10);
     yPos += 42;
@@ -275,7 +300,7 @@ export default async function handler(req, res) {
 
     yPos += customer.notes ? 110 : 90;
 
-    // ===== ITEMS TABLE =====
+    // Items header
     pdfDoc.roundedRect(50, yPos, 495, 32, 8).fillColor(greenDark).fill();
     pdfDoc.fontSize(13).fillColor('white').font('Helvetica-Bold').text('📦 Order Items', 65, yPos + 10);
     yPos += 42;
@@ -313,9 +338,8 @@ export default async function handler(req, res) {
       yPos += 26;
     });
 
-    // ===== TOTALS =====
+    // Totals
     yPos += 20;
-
     const computedTotal = items.reduce((s, it) => s + Number(it.price || 0) * Number(it.qty || 0), 0);
     const total = typeof data.total === 'number' ? data.total : computedTotal;
 
@@ -341,7 +365,7 @@ export default async function handler(req, res) {
       .fontSize(16)
       .text(`€${total.toFixed(2)}`, 450, yPos + 62, { width: 75, align: 'right' });
 
-    // ===== FOOTER =====
+    // Footer
     yPos += 110;
 
     pdfDoc.roundedRect(50, yPos, 250, 28, 6).fillColor(greenPale).fill();
@@ -370,7 +394,6 @@ export default async function handler(req, res) {
     }
 
     yPos += 22;
-
     pdfDoc
       .fontSize(9)
       .fillColor(lightGray)
