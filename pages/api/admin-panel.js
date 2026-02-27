@@ -3,8 +3,8 @@
 // Access at: yourapp.vercel.app/api/admin-panel
 
 export default function handler(req, res) {
-  res.setHeader('Content-Type', 'text/html; charset=utf-8');
-  res.setHeader('X-Robots-Tag', 'noindex, nofollow');
+  res.setHeader("Content-Type", "text/html; charset=utf-8");
+  res.setHeader("X-Robots-Tag", "noindex, nofollow");
   res.status(200).send(`<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -243,6 +243,17 @@ body{font-family:'Sora',sans-serif;background:var(--off-white);color:var(--text-
       <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="2"/><line x1="9" y1="12" x2="15" y2="12"/><line x1="9" y1="16" x2="13" y2="16"/></svg>
       <span>Orders</span>
     </button>
+
+    <!-- CUSTOMERS NAV (added per instructions) -->
+    <button class="nav-item" id="nav-customers" onclick="showTab('customers')">
+      <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+        <circle cx="9" cy="7" r="4"/>
+        <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+        <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+      </svg>
+      <span>Customers</span>
+    </button>
   </nav>
   <div style="padding:10px 12px 16px;border-top:1px solid rgba(255,255,255,.07);">
     <button class="logout-btn" onclick="doLogout()">
@@ -337,7 +348,46 @@ body{font-family:'Sora',sans-serif;background:var(--off-white);color:var(--text-
     <div class="orders-grid" id="orders-grid"></div>
   </div>
 
+  <!-- CUSTOMERS TAB (added per instructions - placed AFTER orders tab, not nested) -->
+  <div class="tab-page" id="tab-customers">
+    <div class="page-header">
+      <div>
+        <h2>Customers</h2>
+        <p id="customer-count-label">Loading...</p>
+      </div>
+      <button class="refresh-btn" onclick="loadCustomers()">
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+          <polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/>
+          <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+        </svg>
+        Refresh
+      </button>
+    </div>
+
+    <div class="section-card">
+      <div class="table-shell">
+        <div class="table-scroll">
+          <table class="top-table">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Customer</th>
+                <th>Phone</th>
+                <th>Address</th>
+                <th>Orders</th>
+                <th>Total Spent</th>
+                <th style="text-align:right">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="customers-table-body"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
 </main>
+
 <div class="toast" id="toast"></div>
 
 <script>
@@ -495,7 +545,13 @@ function showTab(tab) {
   document.querySelectorAll('.nav-item').forEach(function(b){b.classList.remove('active');});
   document.getElementById('tab-'+tab).classList.add('active');
   document.getElementById('nav-'+tab).classList.add('active');
+
   if (tab === 'analytics') setTimeout(renderAnalytics, 50);
+
+  // Added per instructions
+  if (tab === 'customers' && allCustomers.length === 0) {
+    loadCustomers();
+  }
 }
 
 function setFilter(filter, btn) {
@@ -599,6 +655,9 @@ function renderOrders() {
       +'<div class="order-footer">'
         +'<div class="order-total"><div class="total-label">Total</div><div class="total-value">€'+total.toFixed(2)+'</div></div>'
         +'<div class="order-actions">'
+          +'<button class="btn btn-invoice" style="background:var(--white);color:var(--green-mid);border:1px solid var(--stroke)" onclick="generateInvoice(\\''+o.id+'\\')">'
+            +'<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>'
+            +'Invoice</button>'
           +'<button class="btn btn-whatsapp" onclick="window.open(\\'https://wa.me/'+phone+'?text='+waMsg+'\\',\\'_blank\\')">'
             +'<svg fill="currentColor" viewBox="0 0 24 24"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347zM12 0C5.373 0 0 5.373 0 12c0 2.093.541 4.063 1.487 5.779L0 24l6.371-1.471A11.94 11.94 0 0 0 12 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 21.818a9.818 9.818 0 0 1-5.013-1.371l-.36-.214-3.721.859.894-3.617-.235-.372A9.795 9.795 0 0 1 2.182 12C2.182 6.58 6.58 2.182 12 2.182S21.818 6.58 21.818 12 17.42 21.818 12 21.818z"/></svg>'
             +'WhatsApp</button>'
@@ -713,6 +772,114 @@ function buildTopCustomers(orders) {
       +'<td>'+c.count+' order'+(c.count!==1?'s':'')+'</td>'
       +'<td class="rev-val" style="text-align:right">€'+c.total.toFixed(2)+'</td></tr>';
   }).join('');
+}
+
+/* ── CUSTOMERS TAB ── */
+var allCustomers = [];
+
+function loadCustomers() {
+  var secret = getSecret();
+  if (!secret) return;
+
+  fetch('/api/admin/customers', { headers: { 'x-admin-secret': secret } })
+    .then(function(res) {
+      if (res.status === 403) { sessionStorage.removeItem(SESSION_KEY); location.reload(); return null; }
+      return res.json();
+    })
+    .then(function(data) {
+      if (!data) return;
+      allCustomers = data.customers || [];
+      renderCustomers();
+      showToast('Customers refreshed — ' + allCustomers.length + ' total');
+    })
+    .catch(function(e) {
+      showToast('Error: ' + e.message);
+    });
+}
+
+function renderCustomers() {
+  var tbody = document.getElementById('customers-table-body');
+  document.getElementById('customer-count-label').textContent = allCustomers.length + ' total customers';
+
+  if (allCustomers.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:40px;color:var(--text-light)">No customers yet</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = allCustomers.map(function(c, i) {
+    var phone = (c.phone || '').replace(/\\s/g, '').replace('+', '');
+    var waMsg = encodeURIComponent(
+      'Hello ' + c.name + '!\\n\\nThank you for being a valued GreenHarvest customer! 🌿\\n\\nWe hope you enjoyed your orders. Let us know if you need anything!'
+    );
+
+    return '<tr>'
+      + '<td class="cell-rank"><div class="rank-pill">' + (i + 1) + '</div></td>'
+      + '<td><span class="prod-name">' + (c.name || 'Unknown') + '</span></td>'
+      + '<td class="cell-mono">' + (c.phone || '—') + '</td>'
+      + '<td>' + (c.address || '—') + '</td>'
+      + '<td>' + c.orderCount + ' order' + (c.orderCount !== 1 ? 's' : '') + '</td>'
+      + '<td class="rev-val">€' + c.totalSpent.toFixed(2) + '</td>'
+      + '<td style="text-align:right">'
+        + '<button class="btn btn-whatsapp" style="font-size:11px;padding:6px 10px" onclick="window.open(\\'https://wa.me/' + phone + '?text=' + waMsg + '\\',\\'_blank\\')">'
+          + '<svg fill="currentColor" viewBox="0 0 24 24" style="width:11px;height:11px"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347zM12 0C5.373 0 0 5.373 0 12c0 2.093.541 4.063 1.487 5.779L0 24l6.371-1.471A11.94 11.94 0 0 0 12 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 21.818a9.818 9.818 0 0 1-5.013-1.371l-.36-.214-3.721.859.894-3.617-.235-.372A9.795 9.795 0 0 1 2.182 12C2.182 6.58 6.58 2.182 12 2.182S21.818 6.58 21.818 12 17.42 21.818 12 21.818z"/></svg>'
+          + ' Contact'
+        + '</button>'
+      + '</td>'
+    + '</tr>';
+  }).join('');
+}
+
+/* ── INVOICE GENERATION ── */
+function generateInvoice(orderId) {
+  var secret = getSecret();
+  if (!secret) return;
+
+  var btn = event.target;
+  // If click landed on SVG/path, climb to button
+  if (btn && btn.tagName && btn.tagName.toLowerCase() !== 'button') {
+    btn = btn.closest('button');
+  }
+  var originalText = btn ? btn.innerHTML : '';
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<div class="spinner" style="width:11px;height:11px;border-width:2px"></div> Generating...';
+  }
+
+  fetch('/api/admin/generate-invoice', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-admin-secret': secret
+    },
+    body: JSON.stringify({ orderId: orderId })
+  })
+    .then(function(res) {
+      if (!res.ok) throw new Error('Failed to generate invoice');
+      return res.blob();
+    })
+    .then(function(blob) {
+      var url = window.URL.createObjectURL(blob);
+      var a = document.createElement('a');
+      a.href = url;
+      a.download = 'GreenHarvest-Invoice-' + orderId.slice(-6).toUpperCase() + '.pdf';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+
+      showToast('Invoice downloaded successfully!');
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = originalText;
+      }
+    })
+    .catch(function(e) {
+      showToast('Error generating invoice: ' + e.message);
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = originalText;
+      }
+    });
 }
 
 function drawBarChart(canvasId, labels, values, colors, yFmt) {
