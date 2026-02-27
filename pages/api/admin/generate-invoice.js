@@ -1,6 +1,12 @@
- // pages/api/admin/generate-invoice.js
-// Generates a PDF invoice with professional logo and correct Arabic (RTL + shaping)
+// pages/api/admin/generate-invoice.js
+// Generates a PDF invoice with Arabic brand: مواسم الخير (RTL + shaping) + leaf logo image
 // Protected by ADMIN_SECRET env var.
+//
+// REQUIREMENTS:
+//   npm i bidi-js arabic-text-shaper
+//   public/fonts/Amiri-Regular.ttf
+//   public/fonts/Amiri-Bold.ttf
+//   public/brand/leaf.png
 
 import { db } from '../../../lib/firebase-admin';
 import PDFDocument from 'pdfkit';
@@ -10,7 +16,6 @@ import path from 'path';
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
-  // Check admin secret
   const secret = process.env.ADMIN_SECRET;
   if (!secret || req.headers['x-admin-secret'] !== secret) {
     return res.status(403).json({ error: 'Forbidden' });
@@ -21,21 +26,18 @@ export default async function handler(req, res) {
     return res.status(422).json({ error: 'Invalid order ID' });
   }
 
-  // ---------- Arabic RTL helpers (never crash) ----------
-  let rtl = (s) => String(s || '');
+  // ---------------- Arabic shaping (never crash) ----------------
+  let rtl = (s) => String(s ?? '');
   let hasArabicSupport = false;
 
   try {
-    // bidi-js can be either a factory fn or module with a default
     const bidiMod = require('bidi-js');
     const bidiFactory =
       (typeof bidiMod === 'function' && bidiMod) ||
       (typeof bidiMod?.default === 'function' && bidiMod.default) ||
       null;
-
     const bidi = bidiFactory ? bidiFactory() : null;
 
-    // arabic-text-shaper export shape differs across builds
     const shaperMod = require('arabic-text-shaper');
     const reshapeFn =
       shaperMod?.reshape ||
@@ -44,31 +46,32 @@ export default async function handler(req, res) {
 
     if (bidi && typeof bidi.fromString === 'function' && typeof reshapeFn === 'function') {
       rtl = (s) => {
-        const raw = String(s || '');
+        const raw = String(s ?? '');
         const shaped = reshapeFn(raw);
-        // writeReordered gives visually-correct string for PDFKit
         return bidi.fromString(shaped).writeReordered();
       };
       hasArabicSupport = true;
     }
   } catch (e) {
-    // deps missing or incompatible -> keep fallback rtl() that won't crash
-    console.warn('Arabic shaping not enabled:', e?.message || e);
+    // If deps are missing, PDF will still generate — Arabic will fallback to English.
+    console.warn('Arabic shaping disabled:', e?.message || e);
   }
 
-  // ---------- Fonts (never crash) ----------
+  // ---------------- Fonts + Logo paths ----------------
   const fontRegularPath = path.join(process.cwd(), 'public', 'fonts', 'Amiri-Regular.ttf');
   const fontBoldPath = path.join(process.cwd(), 'public', 'fonts', 'Amiri-Bold.ttf');
   const hasArabicFonts = fs.existsSync(fontRegularPath) && fs.existsSync(fontBoldPath);
 
+  const leafLogoPath = path.join(process.cwd(), 'public', 'brand', 'leaf.png');
+  const hasLeafLogo = fs.existsSync(leafLogoPath);
+
   try {
-    // Fetch order from Firestore
+    // Fetch order
     const doc = await db.collection('orders').doc(orderId).get();
     if (!doc.exists) return res.status(404).json({ error: 'Order not found' });
 
     const data = doc.data();
 
-    // Transform order data
     const customer = {
       name: data.customerName || data.customer?.name || 'Unknown',
       phone: data.customerPhone || data.customer?.phone || 'N/A',
@@ -93,13 +96,13 @@ export default async function handler(req, res) {
       compress: true,
     });
 
-    // Register Arabic fonts if present
+    // Register Arabic fonts
     if (hasArabicFonts) {
       pdfDoc.registerFont('Amiri', fontRegularPath);
       pdfDoc.registerFont('Amiri-Bold', fontBoldPath);
     }
 
-    // Response headers
+    // Headers
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader(
       'Content-Disposition',
@@ -117,57 +120,47 @@ export default async function handler(req, res) {
     const gray = '#4A4A4A';
     const lightGray = '#8A8A8A';
 
-    // ===== LOGO DESIGN =====
+    // ===== HEADER: LOGO + ARABIC BRAND =====
     const logoX = 50;
     const logoY = 45;
     const logoSize = 70;
 
+    // Circle background
     pdfDoc
       .circle(logoX + logoSize / 2, logoY + logoSize / 2, logoSize / 2)
       .fillColor(greenDark)
       .fill();
-
     pdfDoc
       .circle(logoX + logoSize / 2, logoY + logoSize / 2, logoSize / 2 - 5)
       .fillColor(greenMid)
       .fill();
 
-    pdfDoc
-      .moveTo(logoX + logoSize / 2, logoY + logoSize / 2 + 15)
-      .lineTo(logoX + logoSize / 2, logoY + logoSize / 2 - 20)
-      .strokeColor('white')
-      .lineWidth(3)
-      .stroke();
+    // Put leaf image INSIDE the circle (if exists), otherwise keep a simple white stem
+    if (hasLeafLogo) {
+      // Clip to circle
+      pdfDoc.save();
+      pdfDoc
+        .circle(logoX + logoSize / 2, logoY + logoSize / 2, logoSize / 2 - 8)
+        .clip();
 
-    // leaf right
-    pdfDoc
-      .moveTo(logoX + logoSize / 2, logoY + logoSize / 2 - 20)
-      .bezierCurveTo(
-        logoX + logoSize / 2 + 15,
-        logoY + logoSize / 2 - 15,
-        logoX + logoSize / 2 + 20,
-        logoY + logoSize / 2,
-        logoX + logoSize / 2,
-        logoY + logoSize / 2 + 10
-      )
-      .fillColor('white')
-      .fill();
+      // Center image nicely
+      const imgPad = 12;
+      pdfDoc.image(leafLogoPath, logoX + imgPad, logoY + imgPad, {
+        fit: [logoSize - imgPad * 2, logoSize - imgPad * 2],
+        align: 'center',
+        valign: 'center',
+      });
+      pdfDoc.restore();
+    } else {
+      pdfDoc
+        .moveTo(logoX + logoSize / 2, logoY + logoSize / 2 + 15)
+        .lineTo(logoX + logoSize / 2, logoY + logoSize / 2 - 20)
+        .strokeColor('white')
+        .lineWidth(3)
+        .stroke();
+    }
 
-    // leaf left
-    pdfDoc
-      .moveTo(logoX + logoSize / 2, logoY + logoSize / 2 - 20)
-      .bezierCurveTo(
-        logoX + logoSize / 2 - 15,
-        logoY + logoSize / 2 - 15,
-        logoX + logoSize / 2 - 20,
-        logoY + logoSize / 2,
-        logoX + logoSize / 2,
-        logoY + logoSize / 2 + 10
-      )
-      .fillColor('white')
-      .fill();
-
-    // dots
+    // Decorative dots
     const dots = 8;
     for (let i = 0; i < dots; i++) {
       const angle = (i / dots) * Math.PI * 2;
@@ -176,25 +169,37 @@ export default async function handler(req, res) {
       pdfDoc.circle(dotX, dotY, 2).fillColor(greenLight).fill();
     }
 
-    // ===== BRAND NAME =====
+    // Brand text: Arabic ONLY (مواسم الخير)
     const textX = logoX + logoSize + 20;
 
-    // Arabic brand: مواسم الخير
-    // Only render Arabic using Arabic fonts + shaping; otherwise show transliteration to avoid broken output.
     if (hasArabicFonts && hasArabicSupport) {
-      pdfDoc.font('Amiri-Bold').fontSize(26).fillColor(greenDark).text(rtl('مواسم الخير'), textX, logoY + 6);
-      pdfDoc.font('Helvetica-Bold').fontSize(11).fillColor(greenMid).text('Mawasem Alkhair', textX, logoY + 42);
+      pdfDoc
+        .font('Amiri-Bold')
+        .fontSize(28)
+        .fillColor(greenDark)
+        .text(rtl('مواسم الخير'), textX, logoY + 8);
+
+      pdfDoc
+        .font('Amiri')
+        .fontSize(12)
+        .fillColor(greenMid)
+        .text(rtl('منتجات عضوية وأطعمة طبيعية'), textX, logoY + 44);
     } else {
-      pdfDoc.font('Helvetica-Bold').fontSize(22).fillColor(greenDark).text('Mawasem Alkhair', textX, logoY + 12);
+      // Safe fallback (so generation never fails)
+      pdfDoc
+        .font('Helvetica-Bold')
+        .fontSize(22)
+        .fillColor(greenDark)
+        .text('Mawasem Alkhair', textX, logoY + 12);
+
+      pdfDoc
+        .font('Helvetica')
+        .fontSize(9)
+        .fillColor(greenLight)
+        .text('Organic Products & Natural Foods', textX, logoY + 42);
     }
 
-    pdfDoc
-      .fontSize(9)
-      .fillColor(greenLight)
-      .font('Helvetica')
-      .text('Organic Products & Natural Foods', textX, logoY + 62);
-
-    // line
+    // Decorative line
     const lineY = logoY + logoSize + 15;
     for (let i = 0; i < 3; i++) {
       const opacity = 0.3 - i * 0.1;
@@ -216,6 +221,7 @@ export default async function handler(req, res) {
     pdfDoc.fontSize(20).fillColor(greenDark).font('Helvetica-Bold').text('INVOICE', 65, yPos + 15);
 
     pdfDoc.roundedRect(380, yPos + 12, 150, 30, 6).fillColor(gold).fill();
+
     pdfDoc
       .fontSize(18)
       .fillColor('white')
@@ -236,7 +242,6 @@ export default async function handler(req, res) {
     const statusEmoji = { new: '🆕', confirmed: '✅', preparing: '👨‍🍳', delivered: '📦', cancelled: '❌' };
     const statusText = (data.status || 'new').toLowerCase();
     const emoji = statusEmoji[statusText] || '📋';
-
     pdfDoc.text(`${emoji} ${statusText.charAt(0).toUpperCase() + statusText.slice(1)}`, 65, yPos + 50);
 
     yPos += 85;
@@ -244,7 +249,6 @@ export default async function handler(req, res) {
     // ===== CUSTOMER SECTION =====
     pdfDoc.roundedRect(50, yPos, 495, 32, 8).fillColor(greenDark).fill();
     pdfDoc.fontSize(13).fillColor('white').font('Helvetica-Bold').text('👤 Bill To', 65, yPos + 10);
-
     yPos += 42;
 
     pdfDoc
@@ -368,14 +372,6 @@ export default async function handler(req, res) {
     yPos += 22;
 
     pdfDoc
-      .fontSize(11)
-      .fillColor(greenDark)
-      .font('Helvetica-Bold')
-      .text('Thank you for choosing Mawasem Alkhair!', 50, yPos, { align: 'center', width: 495 });
-
-    yPos += 18;
-
-    pdfDoc
       .fontSize(9)
       .fillColor(lightGray)
       .font('Helvetica')
@@ -385,10 +381,7 @@ export default async function handler(req, res) {
   } catch (err) {
     console.error('Invoice generation error:', err);
     if (!res.headersSent) {
-      return res.status(500).json({
-        error: 'Failed to generate invoice',
-        details: err?.message || String(err),
-      });
+      return res.status(500).json({ error: 'Failed to generate invoice', details: err?.message || String(err) });
     }
   }
 }
