@@ -1,5 +1,5 @@
 // pages/api/admin/generate-invoice.js
-// Generates a PDF invoice for an order with styled logo
+// Generates a PDF invoice with professional logo and Arabic branding
 // Protected by ADMIN_SECRET env var.
 
 import { db } from '../../../lib/firebase-admin';
@@ -72,142 +72,252 @@ export default async function handler(req, res) {
     const gray = '#4A4A4A';
     const lightGray = '#8A8A8A';
 
-    // ===== LOGO AND HEADER =====
+    // ===== LOGO DESIGN =====
     
-    // Logo box with leaf icon
-    const logoSize = 60;
     const logoX = 50;
     const logoY = 45;
+    const logoSize = 70;
     
-    // Draw rounded rectangle for logo background
+    // Main circular logo background
     pdfDoc
-      .roundedRect(logoX, logoY, logoSize, logoSize, 12)
+      .circle(logoX + logoSize/2, logoY + logoSize/2, logoSize/2)
       .fillColor(greenDark)
       .fill();
     
-    // Add leaf emoji in logo box
+    // Inner circle (lighter green)
     pdfDoc
-      .fontSize(32)
+      .circle(logoX + logoSize/2, logoY + logoSize/2, logoSize/2 - 5)
+      .fillColor(greenMid)
+      .fill();
+    
+    // Draw stylized leaf in center
+    // Leaf stem
+    pdfDoc
+      .moveTo(logoX + logoSize/2, logoY + logoSize/2 + 15)
+      .lineTo(logoX + logoSize/2, logoY + logoSize/2 - 20)
+      .strokeColor('white')
+      .lineWidth(3)
+      .stroke();
+    
+    // Leaf shape (right side)
+    pdfDoc.save();
+    pdfDoc
+      .moveTo(logoX + logoSize/2, logoY + logoSize/2 - 20)
+      .bezierCurveTo(
+        logoX + logoSize/2 + 15, logoY + logoSize/2 - 15,
+        logoX + logoSize/2 + 20, logoY + logoSize/2,
+        logoX + logoSize/2, logoY + logoSize/2 + 10
+      )
       .fillColor('white')
-      .text('🌿', logoX + 14, logoY + 14);
-
-    // Company Name
+      .fill();
+    pdfDoc.restore();
+    
+    // Leaf shape (left side)
+    pdfDoc.save();
     pdfDoc
-      .fontSize(24)
+      .moveTo(logoX + logoSize/2, logoY + logoSize/2 - 20)
+      .bezierCurveTo(
+        logoX + logoSize/2 - 15, logoY + logoSize/2 - 15,
+        logoX + logoSize/2 - 20, logoY + logoSize/2,
+        logoX + logoSize/2, logoY + logoSize/2 + 10
+      )
+      .fillColor('white')
+      .fill();
+    pdfDoc.restore();
+    
+    // Decorative dots around logo
+    const dots = 8;
+    for (let i = 0; i < dots; i++) {
+      const angle = (i / dots) * Math.PI * 2;
+      const dotX = logoX + logoSize/2 + Math.cos(angle) * (logoSize/2 + 8);
+      const dotY = logoY + logoSize/2 + Math.sin(angle) * (logoSize/2 + 8);
+      pdfDoc.circle(dotX, dotY, 2).fillColor(greenLight).fill();
+    }
+
+    // ===== BRAND NAME =====
+    
+    const textX = logoX + logoSize + 20;
+    
+    // English name
+    pdfDoc
+      .fontSize(26)
       .fillColor(greenDark)
       .font('Helvetica-Bold')
-      .text('GreenHarvest', logoX + logoSize + 15, logoY + 8);
+      .text('GreenHarvest', textX, logoY + 10);
+
+    // Arabic name (مواسم الخير)
+    // Note: Arabic text direction - written right-to-left
+    pdfDoc
+      .fontSize(18)
+      .fillColor(greenMid)
+      .font('Helvetica-Bold')
+      .text('مواسم الخير', textX, logoY + 38, { 
+        features: ['rtla']  // Right-to-left aware
+      });
 
     // Tagline
     pdfDoc
-      .fontSize(10)
+      .fontSize(9)
       .fillColor(greenLight)
       .font('Helvetica')
-      .text('Organic Products & Natural Foods', logoX + logoSize + 15, logoY + 38);
+      .text('Organic Products & Natural Foods', textX, logoY + 62);
 
-    // Decorative line
-    pdfDoc
-      .moveTo(50, logoY + logoSize + 20)
-      .lineTo(545, logoY + logoSize + 20)
-      .strokeColor(greenPale)
-      .lineWidth(2)
-      .stroke();
+    // Decorative line with gradient effect (simulated with multiple lines)
+    const lineY = logoY + logoSize + 15;
+    for (let i = 0; i < 3; i++) {
+      const opacity = 0.3 - (i * 0.1);
+      pdfDoc
+        .moveTo(50, lineY + i)
+        .lineTo(545, lineY + i)
+        .strokeColor(greenPale)
+        .opacity(1 - opacity)
+        .lineWidth(1)
+        .stroke();
+    }
+    pdfDoc.opacity(1); // Reset opacity
 
     // Reset position
-    let yPos = logoY + logoSize + 40;
+    let yPos = lineY + 25;
 
-    // ===== INVOICE INFO =====
+    // ===== INVOICE INFO BOX =====
     
-    // Invoice title and number
+    // Invoice info box background
     pdfDoc
-      .fontSize(18)
+      .roundedRect(50, yPos, 495, 65, 10)
+      .fillColor('#F8F6F1')
+      .fill();
+
+    // Invoice title
+    pdfDoc
+      .fontSize(20)
       .fillColor(greenDark)
       .font('Helvetica-Bold')
-      .text('INVOICE', 50, yPos);
+      .text('INVOICE', 65, yPos + 15);
+
+    // Invoice number badge
+    pdfDoc
+      .roundedRect(380, yPos + 12, 150, 30, 6)
+      .fillColor(gold)
+      .fill();
 
     pdfDoc
       .fontSize(18)
-      .fillColor(gold)
-      .text(`#${doc.id.slice(-6).toUpperCase()}`, 400, yPos, { width: 145, align: 'right' });
+      .fillColor('white')
+      .font('Helvetica-Bold')
+      .text(`#${doc.id.slice(-6).toUpperCase()}`, 380, yPos + 20, { width: 150, align: 'center' });
 
-    yPos += 25;
-
+    // Date and Status
     pdfDoc
       .fontSize(10)
       .fillColor(gray)
       .font('Helvetica')
-      .text(`Date: ${orderDate.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}`, 400, yPos, { width: 145, align: 'right' })
-      .text(`Status: ${(data.status || 'new').charAt(0).toUpperCase() + (data.status || 'new').slice(1).toLowerCase()}`, 400, yPos + 15, { width: 145, align: 'right' });
+      .text(`📅 ${orderDate.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}`, 380, yPos + 50, { width: 150, align: 'center' });
 
-    yPos += 50;
+    const statusEmoji = {
+      'new': '🆕',
+      'confirmed': '✅',
+      'preparing': '👨‍🍳',
+      'delivered': '📦',
+      'cancelled': '❌'
+    };
+    const statusText = (data.status || 'new').toLowerCase();
+    const emoji = statusEmoji[statusText] || '📋';
+
+    pdfDoc
+      .text(`${emoji} ${statusText.charAt(0).toUpperCase() + statusText.slice(1)}`, 65, yPos + 50);
+
+    yPos += 85;
 
     // ===== CUSTOMER SECTION =====
     
-    // "Bill To" header with background
+    // "Bill To" header
     pdfDoc
-      .roundedRect(50, yPos, 200, 25, 6)
-      .fillColor(greenPale)
+      .roundedRect(50, yPos, 495, 32, 8)
+      .fillColor(greenDark)
       .fill();
 
     pdfDoc
-      .fontSize(12)
+      .fontSize(13)
+      .fillColor('white')
+      .font('Helvetica-Bold')
+      .text('👤 Bill To', 65, yPos + 10);
+
+    yPos += 42;
+
+    // Customer details box
+    pdfDoc
+      .roundedRect(50, yPos, 495, customer.notes ? 90 : 70, 8)
+      .strokeColor('#E2DDD5')
+      .lineWidth(1)
+      .stroke();
+
+    const detailsY = yPos + 15;
+
+    pdfDoc
+      .fontSize(10)
       .fillColor(greenDark)
       .font('Helvetica-Bold')
-      .text('Bill To:', 60, yPos + 7);
+      .text('Name:', 65, detailsY)
+      .fillColor(gray)
+      .font('Helvetica')
+      .text(customer.name, 120, detailsY);
 
-    yPos += 35;
+    pdfDoc
+      .fillColor(greenDark)
+      .font('Helvetica-Bold')
+      .text('Phone:', 65, detailsY + 18)
+      .fillColor(gray)
+      .font('Helvetica')
+      .text(customer.phone, 120, detailsY + 18);
 
-    // Customer details
-    const customerDetails = [
-      ['Name:', customer.name],
-      ['Phone:', customer.phone],
-      ['Address:', customer.address]
-    ];
+    pdfDoc
+      .fillColor(greenDark)
+      .font('Helvetica-Bold')
+      .text('Address:', 65, detailsY + 36)
+      .fillColor(gray)
+      .font('Helvetica')
+      .text(customer.address, 120, detailsY + 36, { width: 410 });
 
     if (customer.notes) {
-      customerDetails.push(['Notes:', customer.notes]);
-    }
-
-    customerDetails.forEach(([label, value]) => {
       pdfDoc
-        .fontSize(10)
         .fillColor(greenDark)
         .font('Helvetica-Bold')
-        .text(label, 50, yPos)
+        .text('Notes:', 65, detailsY + 54)
         .fillColor(gray)
         .font('Helvetica')
-        .text(value, 120, yPos, { width: 425 });
-      yPos += 18;
-    });
+        .text(customer.notes, 120, detailsY + 54, { width: 410 });
+    }
 
-    yPos += 20;
+    yPos += (customer.notes ? 110 : 90);
 
     // ===== ITEMS TABLE =====
     
-    // "Order Items" header
+    // Table header
     pdfDoc
-      .roundedRect(50, yPos, 200, 25, 6)
-      .fillColor(greenPale)
+      .roundedRect(50, yPos, 495, 32, 8)
+      .fillColor(greenDark)
       .fill();
 
     pdfDoc
-      .fontSize(12)
-      .fillColor(greenDark)
+      .fontSize(13)
+      .fillColor('white')
       .font('Helvetica-Bold')
-      .text('Order Items:', 60, yPos + 7);
+      .text('📦 Order Items', 65, yPos + 10);
 
-    yPos += 35;
+    yPos += 42;
 
-    // Table Header
-    pdfDoc
-      .roundedRect(50, yPos, 495, 28, 8)
-      .fillColor(greenDark)
-      .fill();
-
+    // Column headers
     pdfDoc
       .fontSize(11)
       .fillColor('white')
-      .font('Helvetica-Bold')
+      .font('Helvetica-Bold');
+
+    pdfDoc
+      .roundedRect(50, yPos, 495, 28, 6)
+      .fillColor(greenMid)
+      .fill();
+
+    pdfDoc
       .text('Item', 60, yPos + 9)
       .text('Qty', 320, yPos + 9, { width: 40, align: 'right' })
       .text('Unit Price', 370, yPos + 9, { width: 70, align: 'right' })
@@ -220,95 +330,93 @@ export default async function handler(req, res) {
     
     items.forEach((item, i) => {
       const bgColor = i % 2 === 0 ? '#FFFFFF' : '#F8F6F1';
-      pdfDoc.rect(50, yPos, 495, 25).fillColor(bgColor).fill();
+      pdfDoc
+        .roundedRect(50, yPos, 495, 26, 4)
+        .fillColor(bgColor)
+        .fill();
 
       const itemName = item.unit ? `${item.name} (${item.unit})` : item.name;
       
       pdfDoc
         .fillColor(gray)
-        .text(itemName, 60, yPos + 8, { width: 250 })
-        .text(item.qty.toString(), 320, yPos + 8, { width: 40, align: 'right' })
-        .text(`€${item.price.toFixed(2)}`, 370, yPos + 8, { width: 70, align: 'right' })
-        .text(`€${(item.price * item.qty).toFixed(2)}`, 450, yPos + 8, { width: 85, align: 'right' });
+        .text(itemName, 60, yPos + 9, { width: 250 })
+        .text(item.qty.toString(), 320, yPos + 9, { width: 40, align: 'right' })
+        .text(`€${item.price.toFixed(2)}`, 370, yPos + 9, { width: 70, align: 'right' })
+        .fillColor(greenDark)
+        .font('Helvetica-Bold')
+        .text(`€${(item.price * item.qty).toFixed(2)}`, 450, yPos + 9, { width: 85, align: 'right' });
 
-      yPos += 25;
+      yPos += 26;
     });
 
     // ===== TOTALS SECTION =====
     
-    yPos += 15;
+    yPos += 20;
     const total = data.total || 0;
 
-    // Divider line
+    // Totals box
     pdfDoc
-      .moveTo(370, yPos)
-      .lineTo(545, yPos)
-      .strokeColor('#E2DDD5')
-      .lineWidth(1)
-      .stroke();
-
-    yPos += 12;
+      .roundedRect(340, yPos, 205, 90, 10)
+      .fillColor('#F8F6F1')
+      .fill();
 
     // Subtotal
     pdfDoc
-      .fontSize(10)
+      .fontSize(11)
       .fillColor(gray)
-      .font('Helvetica-Bold')
-      .text('Subtotal:', 370, yPos, { width: 70, align: 'right' })
-      .text(`€${total.toFixed(2)}`, 450, yPos, { width: 85, align: 'right' });
-
-    yPos += 18;
+      .font('Helvetica')
+      .text('Subtotal:', 360, yPos + 15, { width: 80, align: 'left' })
+      .text(`€${total.toFixed(2)}`, 450, yPos + 15, { width: 85, align: 'right' });
 
     // Tax
     pdfDoc
-      .text('Tax (0%):', 370, yPos, { width: 70, align: 'right' })
-      .text('€0.00', 450, yPos, { width: 85, align: 'right' });
+      .text('Tax (0%):', 360, yPos + 35, { width: 80, align: 'left' })
+      .text('€0.00', 450, yPos + 35, { width: 85, align: 'right' });
 
-    yPos += 18;
-
-    // Total line
+    // Total
     pdfDoc
-      .moveTo(370, yPos)
-      .lineTo(545, yPos)
-      .lineWidth(2)
-      .strokeColor(greenDark)
-      .stroke();
+      .roundedRect(350, yPos + 55, 185, 28, 6)
+      .fillColor(greenDark)
+      .fill();
 
-    yPos += 12;
-
-    // Total box
     pdfDoc
-      .roundedRect(370, yPos, 175, 35, 8)
+      .fontSize(14)
+      .fillColor('white')
+      .font('Helvetica-Bold')
+      .text('TOTAL:', 365, yPos + 63, { width: 80, align: 'left' })
+      .fontSize(16)
+      .text(`€${total.toFixed(2)}`, 450, yPos + 62, { width: 75, align: 'right' });
+
+    // ===== PAYMENT & FOOTER =====
+    
+    yPos += 110;
+
+    // Payment method badge
+    pdfDoc
+      .roundedRect(50, yPos, 250, 28, 6)
       .fillColor(greenPale)
       .fill();
 
     pdfDoc
-      .fontSize(13)
+      .fontSize(10)
       .fillColor(greenDark)
       .font('Helvetica-Bold')
-      .text('Total:', 380, yPos + 11, { width: 60, align: 'left' })
-      .fontSize(14)
-      .text(`€${total.toFixed(2)}`, 450, yPos + 11, { width: 85, align: 'right' });
+      .text(`💳 ${(data.paymentMethod || 'cash_on_delivery').replace(/_/g, ' ').split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')}`, 65, yPos + 9);
 
-    // ===== FOOTER SECTION =====
-    
-    yPos += 55;
-
-    // Payment method
-    pdfDoc
-      .fontSize(10)
-      .fillColor(gray)
-      .font('Helvetica')
-      .text(`Payment Method: ${(data.paymentMethod || 'cash_on_delivery').replace(/_/g, ' ').split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')}`, 50, yPos);
-
-    yPos += 40;
+    yPos += 50;
 
     // Thank you message
     pdfDoc
-      .fontSize(11)
+      .fontSize(12)
       .fillColor(greenDark)
       .font('Helvetica-Bold')
-      .text('Thank you for choosing GreenHarvest! 🌿', 50, yPos, { align: 'center', width: 495 });
+      .text('شكراً لاختياركم مواسم الخير! 🌿', 50, yPos, { align: 'center', width: 495 });
+
+    yPos += 20;
+
+    pdfDoc
+      .fontSize(11)
+      .text('Thank you for choosing GreenHarvest!', 50, yPos, { align: 'center', width: 495 });
 
     yPos += 18;
 
