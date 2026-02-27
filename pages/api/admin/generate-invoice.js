@@ -1,14 +1,20 @@
 // pages/api/admin/generate-invoice.js
-// Generates a PDF invoice with professional logo and Arabic branding
+// Generates a PDF invoice with professional logo + correct Arabic RTL rendering
 // Protected by ADMIN_SECRET env var.
+//
+// Requires:
+//   npm i bidi-js arabic-text-shaper
+// And font files placed at:
+//   /public/fonts/Amiri-Regular.ttf
+//   /public/fonts/Amiri-Bold.ttf
 
 import { db } from '../../../lib/firebase-admin';
 import PDFDocument from 'pdfkit';
+import fs from 'fs';
+import path from 'path';
 
 export default async function handler(req, res) {
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' });
-  }
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
   // Check admin secret
   const secret = process.env.ADMIN_SECRET;
@@ -17,48 +23,87 @@ export default async function handler(req, res) {
   }
 
   const { orderId } = req.body || {};
-
   if (!orderId || typeof orderId !== 'string') {
     return res.status(422).json({ error: 'Invalid order ID' });
   }
 
+  // Lazy-require (keeps Next/Vercel bundling happier)
+  let bidi;
+  let arabicShaper;
+  try {
+    const bidiFactory = require('bidi-js');
+    bidi = typeof bidiFactory === 'function' ? bidiFactory() : bidiFactory;
+    arabicShaper = require('arabic-text-shaper');
+  } catch (e) {
+    console.error('Missing Arabic shaping deps:', e);
+    return res.status(500).json({
+      error: 'Missing dependencies for Arabic rendering',
+      details: 'Run: npm i bidi-js arabic-text-shaper',
+    });
+  }
+
+  // RTL helper: Arabic shaping + BiDi reordering
+  function rtl(str) {
+    if (!str) return '';
+    try {
+      const shaped = arabicShaper.reshape(String(str));
+      // bidi-js API: fromString().writeReordered() is the common usage
+      return bidi.fromString(shaped).writeReordered();
+    } catch {
+      return String(str);
+    }
+  }
+
+  // Font paths (embedded)
+  const fontRegularPath = path.join(process.cwd(), 'public', 'fonts', 'Amiri-Regular.ttf');
+  const fontBoldPath = path.join(process.cwd(), 'public', 'fonts', 'Amiri-Bold.ttf');
+
+  const hasArabicFonts = fs.existsSync(fontRegularPath) && fs.existsSync(fontBoldPath);
+
   try {
     // Fetch order from Firestore
     const doc = await db.collection('orders').doc(orderId).get();
-    
-    if (!doc.exists) {
-      return res.status(404).json({ error: 'Order not found' });
-    }
+    if (!doc.exists) return res.status(404).json({ error: 'Order not found' });
 
     const data = doc.data();
-    
+
     // Transform order data
     const customer = {
       name: data.customerName || data.customer?.name || 'Unknown',
       phone: data.customerPhone || data.customer?.phone || 'N/A',
       address: data.customerAddress || data.customer?.address || 'N/A',
-      notes: data.note || data.notes || data.customer?.notes || ''
+      notes: data.note || data.notes || data.customer?.notes || '',
     };
 
-    const items = (data.items || []).map(item => ({
+    const items = (data.items || []).map((item) => ({
       name: item.productName || item.name || 'Product',
       qty: item.quantity || item.qty || 1,
       price: item.priceEach || item.price || 0,
-      unit: item.unit || ''
+      unit: item.unit || '',
     }));
 
-    const orderDate = data.createdAt?.toDate?.() 
-                      || (data.timestamp ? new Date(data.timestamp) : new Date());
+    const orderDate =
+      data.createdAt?.toDate?.() || (data.timestamp ? new Date(data.timestamp) : new Date());
 
     // Create PDF
     const pdfDoc = new PDFDocument({
       size: 'A4',
-      margins: { top: 50, bottom: 50, left: 50, right: 50 }
+      margins: { top: 50, bottom: 50, left: 50, right: 50 },
+      compress: true,
     });
+
+    // Register Arabic fonts (if present)
+    if (hasArabicFonts) {
+      pdfDoc.registerFont('Amiri', fontRegularPath);
+      pdfDoc.registerFont('Amiri-Bold', fontBoldPath);
+    }
 
     // Set response headers
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename="GreenHarvest-Invoice-${doc.id.slice(-6).toUpperCase()}.pdf"`);
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="MawasemAlKhair-Invoice-${doc.id.slice(-6).toUpperCase()}.pdf"`
+    );
 
     // Pipe PDF to response
     pdfDoc.pipe(res);
@@ -73,87 +118,96 @@ export default async function handler(req, res) {
     const lightGray = '#8A8A8A';
 
     // ===== LOGO DESIGN =====
-    
     const logoX = 50;
     const logoY = 45;
     const logoSize = 70;
-    
+
     // Main circular logo background
     pdfDoc
-      .circle(logoX + logoSize/2, logoY + logoSize/2, logoSize/2)
+      .circle(logoX + logoSize / 2, logoY + logoSize / 2, logoSize / 2)
       .fillColor(greenDark)
       .fill();
-    
-    // Inner circle (lighter green)
+
+    // Inner circle
     pdfDoc
-      .circle(logoX + logoSize/2, logoY + logoSize/2, logoSize/2 - 5)
+      .circle(logoX + logoSize / 2, logoY + logoSize / 2, logoSize / 2 - 5)
       .fillColor(greenMid)
       .fill();
-    
-    // Draw stylized leaf in center
+
     // Leaf stem
     pdfDoc
-      .moveTo(logoX + logoSize/2, logoY + logoSize/2 + 15)
-      .lineTo(logoX + logoSize/2, logoY + logoSize/2 - 20)
+      .moveTo(logoX + logoSize / 2, logoY + logoSize / 2 + 15)
+      .lineTo(logoX + logoSize / 2, logoY + logoSize / 2 - 20)
       .strokeColor('white')
       .lineWidth(3)
       .stroke();
-    
-    // Leaf shape (right side)
+
+    // Leaf (right)
     pdfDoc.save();
     pdfDoc
-      .moveTo(logoX + logoSize/2, logoY + logoSize/2 - 20)
+      .moveTo(logoX + logoSize / 2, logoY + logoSize / 2 - 20)
       .bezierCurveTo(
-        logoX + logoSize/2 + 15, logoY + logoSize/2 - 15,
-        logoX + logoSize/2 + 20, logoY + logoSize/2,
-        logoX + logoSize/2, logoY + logoSize/2 + 10
+        logoX + logoSize / 2 + 15,
+        logoY + logoSize / 2 - 15,
+        logoX + logoSize / 2 + 20,
+        logoY + logoSize / 2,
+        logoX + logoSize / 2,
+        logoY + logoSize / 2 + 10
       )
       .fillColor('white')
       .fill();
     pdfDoc.restore();
-    
-    // Leaf shape (left side)
+
+    // Leaf (left)
     pdfDoc.save();
     pdfDoc
-      .moveTo(logoX + logoSize/2, logoY + logoSize/2 - 20)
+      .moveTo(logoX + logoSize / 2, logoY + logoSize / 2 - 20)
       .bezierCurveTo(
-        logoX + logoSize/2 - 15, logoY + logoSize/2 - 15,
-        logoX + logoSize/2 - 20, logoY + logoSize/2,
-        logoX + logoSize/2, logoY + logoSize/2 + 10
+        logoX + logoSize / 2 - 15,
+        logoY + logoSize / 2 - 15,
+        logoX + logoSize / 2 - 20,
+        logoY + logoSize / 2,
+        logoX + logoSize / 2,
+        logoY + logoSize / 2 + 10
       )
       .fillColor('white')
       .fill();
     pdfDoc.restore();
-    
-    // Decorative dots around logo
+
+    // Decorative dots
     const dots = 8;
     for (let i = 0; i < dots; i++) {
       const angle = (i / dots) * Math.PI * 2;
-      const dotX = logoX + logoSize/2 + Math.cos(angle) * (logoSize/2 + 8);
-      const dotY = logoY + logoSize/2 + Math.sin(angle) * (logoSize/2 + 8);
+      const dotX = logoX + logoSize / 2 + Math.cos(angle) * (logoSize / 2 + 8);
+      const dotY = logoY + logoSize / 2 + Math.sin(angle) * (logoSize / 2 + 8);
       pdfDoc.circle(dotX, dotY, 2).fillColor(greenLight).fill();
     }
 
-    // ===== BRAND NAME =====
-    
+    // ===== BRAND NAME (Arabic primary) =====
     const textX = logoX + logoSize + 20;
-    
-    // English name
-    pdfDoc
-      .fontSize(26)
-      .fillColor(greenDark)
-      .font('Helvetica-Bold')
-      .text('GreenHarvest', textX, logoY + 10);
 
-    // Arabic name (مواسم الخير)
-    // Note: Arabic text direction - written right-to-left
-    pdfDoc
-      .fontSize(18)
-      .fillColor(greenMid)
-      .font('Helvetica-Bold')
-      .text('مواسم الخير', textX, logoY + 38, { 
-        features: ['rtla']  // Right-to-left aware
-      });
+    // Arabic brand (مواسم الخير) — correct RTL shaping
+    if (hasArabicFonts) {
+      pdfDoc
+        .fontSize(26)
+        .fillColor(greenDark)
+        .font('Amiri-Bold')
+        .text(rtl('مواسم الخير'), textX, logoY + 6, { width: 475 - (textX - 50), align: 'left' });
+
+      // Optional English small (kept subtle)
+      pdfDoc
+        .fontSize(11)
+        .fillColor(greenMid)
+        .font('Helvetica-Bold')
+        .text('Mawasem Alkhair', textX, logoY + 42);
+    } else {
+      // Fallback if fonts missing (Arabic may still not render correctly)
+      pdfDoc
+        .fontSize(22)
+        .fillColor(greenDark)
+        .font('Helvetica-Bold')
+        .text('Mawasem Alkhair', textX, logoY + 10);
+    }
 
     // Tagline
     pdfDoc
@@ -162,10 +216,10 @@ export default async function handler(req, res) {
       .font('Helvetica')
       .text('Organic Products & Natural Foods', textX, logoY + 62);
 
-    // Decorative line with gradient effect (simulated with multiple lines)
+    // Decorative line
     const lineY = logoY + logoSize + 15;
     for (let i = 0; i < 3; i++) {
-      const opacity = 0.3 - (i * 0.1);
+      const opacity = 0.3 - i * 0.1;
       pdfDoc
         .moveTo(50, lineY + i)
         .lineTo(545, lineY + i)
@@ -174,31 +228,16 @@ export default async function handler(req, res) {
         .lineWidth(1)
         .stroke();
     }
-    pdfDoc.opacity(1); // Reset opacity
+    pdfDoc.opacity(1);
 
-    // Reset position
     let yPos = lineY + 25;
 
     // ===== INVOICE INFO BOX =====
-    
-    // Invoice info box background
-    pdfDoc
-      .roundedRect(50, yPos, 495, 65, 10)
-      .fillColor('#F8F6F1')
-      .fill();
+    pdfDoc.roundedRect(50, yPos, 495, 65, 10).fillColor('#F8F6F1').fill();
 
-    // Invoice title
-    pdfDoc
-      .fontSize(20)
-      .fillColor(greenDark)
-      .font('Helvetica-Bold')
-      .text('INVOICE', 65, yPos + 15);
+    pdfDoc.fontSize(20).fillColor(greenDark).font('Helvetica-Bold').text('INVOICE', 65, yPos + 15);
 
-    // Invoice number badge
-    pdfDoc
-      .roundedRect(380, yPos + 12, 150, 30, 6)
-      .fillColor(gold)
-      .fill();
+    pdfDoc.roundedRect(380, yPos + 12, 150, 30, 6).fillColor(gold).fill();
 
     pdfDoc
       .fontSize(18)
@@ -206,45 +245,41 @@ export default async function handler(req, res) {
       .font('Helvetica-Bold')
       .text(`#${doc.id.slice(-6).toUpperCase()}`, 380, yPos + 20, { width: 150, align: 'center' });
 
-    // Date and Status
     pdfDoc
       .fontSize(10)
       .fillColor(gray)
       .font('Helvetica')
-      .text(`📅 ${orderDate.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}`, 380, yPos + 50, { width: 150, align: 'center' });
+      .text(
+        `📅 ${orderDate.toLocaleDateString('en-GB', {
+          day: '2-digit',
+          month: 'short',
+          year: 'numeric',
+        })}`,
+        380,
+        yPos + 50,
+        { width: 150, align: 'center' }
+      );
 
     const statusEmoji = {
-      'new': '🆕',
-      'confirmed': '✅',
-      'preparing': '👨‍🍳',
-      'delivered': '📦',
-      'cancelled': '❌'
+      new: '🆕',
+      confirmed: '✅',
+      preparing: '👨‍🍳',
+      delivered: '📦',
+      cancelled: '❌',
     };
     const statusText = (data.status || 'new').toLowerCase();
     const emoji = statusEmoji[statusText] || '📋';
 
-    pdfDoc
-      .text(`${emoji} ${statusText.charAt(0).toUpperCase() + statusText.slice(1)}`, 65, yPos + 50);
+    pdfDoc.text(`${emoji} ${statusText.charAt(0).toUpperCase() + statusText.slice(1)}`, 65, yPos + 50);
 
     yPos += 85;
 
     // ===== CUSTOMER SECTION =====
-    
-    // "Bill To" header
-    pdfDoc
-      .roundedRect(50, yPos, 495, 32, 8)
-      .fillColor(greenDark)
-      .fill();
-
-    pdfDoc
-      .fontSize(13)
-      .fillColor('white')
-      .font('Helvetica-Bold')
-      .text('👤 Bill To', 65, yPos + 10);
+    pdfDoc.roundedRect(50, yPos, 495, 32, 8).fillColor(greenDark).fill();
+    pdfDoc.fontSize(13).fillColor('white').font('Helvetica-Bold').text('👤 Bill To', 65, yPos + 10);
 
     yPos += 42;
 
-    // Customer details box
     pdfDoc
       .roundedRect(50, yPos, 495, customer.notes ? 90 : 70, 8)
       .strokeColor('#E2DDD5')
@@ -288,34 +323,16 @@ export default async function handler(req, res) {
         .text(customer.notes, 120, detailsY + 54, { width: 410 });
     }
 
-    yPos += (customer.notes ? 110 : 90);
+    yPos += customer.notes ? 110 : 90;
 
     // ===== ITEMS TABLE =====
-    
-    // Table header
-    pdfDoc
-      .roundedRect(50, yPos, 495, 32, 8)
-      .fillColor(greenDark)
-      .fill();
-
-    pdfDoc
-      .fontSize(13)
-      .fillColor('white')
-      .font('Helvetica-Bold')
-      .text('📦 Order Items', 65, yPos + 10);
+    pdfDoc.roundedRect(50, yPos, 495, 32, 8).fillColor(greenDark).fill();
+    pdfDoc.fontSize(13).fillColor('white').font('Helvetica-Bold').text('📦 Order Items', 65, yPos + 10);
 
     yPos += 42;
 
-    // Column headers
-    pdfDoc
-      .fontSize(11)
-      .fillColor('white')
-      .font('Helvetica-Bold');
-
-    pdfDoc
-      .roundedRect(50, yPos, 495, 28, 6)
-      .fillColor(greenMid)
-      .fill();
+    pdfDoc.fontSize(11).fillColor('white').font('Helvetica-Bold');
+    pdfDoc.roundedRect(50, yPos, 495, 28, 6).fillColor(greenMid).fill();
 
     pdfDoc
       .text('Item', 60, yPos + 9)
@@ -325,42 +342,39 @@ export default async function handler(req, res) {
 
     yPos += 28;
 
-    // Table Rows
     pdfDoc.fontSize(10).fillColor(gray).font('Helvetica');
-    
+
     items.forEach((item, i) => {
       const bgColor = i % 2 === 0 ? '#FFFFFF' : '#F8F6F1';
-      pdfDoc
-        .roundedRect(50, yPos, 495, 26, 4)
-        .fillColor(bgColor)
-        .fill();
+      pdfDoc.roundedRect(50, yPos, 495, 26, 4).fillColor(bgColor).fill();
 
       const itemName = item.unit ? `${item.name} (${item.unit})` : item.name;
-      
+
       pdfDoc
         .fillColor(gray)
         .text(itemName, 60, yPos + 9, { width: 250 })
-        .text(item.qty.toString(), 320, yPos + 9, { width: 40, align: 'right' })
-        .text(`€${item.price.toFixed(2)}`, 370, yPos + 9, { width: 70, align: 'right' })
+        .text(String(item.qty), 320, yPos + 9, { width: 40, align: 'right' })
+        .text(`€${Number(item.price || 0).toFixed(2)}`, 370, yPos + 9, { width: 70, align: 'right' })
         .fillColor(greenDark)
         .font('Helvetica-Bold')
-        .text(`€${(item.price * item.qty).toFixed(2)}`, 450, yPos + 9, { width: 85, align: 'right' });
+        .text(`€${(Number(item.price || 0) * Number(item.qty || 0)).toFixed(2)}`, 450, yPos + 9, {
+          width: 85,
+          align: 'right',
+        });
 
+      pdfDoc.font('Helvetica');
       yPos += 26;
     });
 
-    // ===== TOTALS SECTION =====
-    
+    // ===== TOTALS =====
     yPos += 20;
-    const total = data.total || 0;
+    const total =
+      typeof data.total === 'number'
+        ? data.total
+        : items.reduce((s, it) => s + Number(it.price || 0) * Number(it.qty || 0), 0);
 
-    // Totals box
-    pdfDoc
-      .roundedRect(340, yPos, 205, 90, 10)
-      .fillColor('#F8F6F1')
-      .fill();
+    pdfDoc.roundedRect(340, yPos, 205, 90, 10).fillColor('#F8F6F1').fill();
 
-    // Subtotal
     pdfDoc
       .fontSize(11)
       .fillColor(gray)
@@ -368,16 +382,11 @@ export default async function handler(req, res) {
       .text('Subtotal:', 360, yPos + 15, { width: 80, align: 'left' })
       .text(`€${total.toFixed(2)}`, 450, yPos + 15, { width: 85, align: 'right' });
 
-    // Tax
     pdfDoc
       .text('Tax (0%):', 360, yPos + 35, { width: 80, align: 'left' })
       .text('€0.00', 450, yPos + 35, { width: 85, align: 'right' });
 
-    // Total
-    pdfDoc
-      .roundedRect(350, yPos + 55, 185, 28, 6)
-      .fillColor(greenDark)
-      .fill();
+    pdfDoc.roundedRect(350, yPos + 55, 185, 28, 6).fillColor(greenDark).fill();
 
     pdfDoc
       .fontSize(14)
@@ -387,36 +396,48 @@ export default async function handler(req, res) {
       .fontSize(16)
       .text(`€${total.toFixed(2)}`, 450, yPos + 62, { width: 75, align: 'right' });
 
-    // ===== PAYMENT & FOOTER =====
-    
+    // ===== FOOTER =====
     yPos += 110;
 
-    // Payment method badge
-    pdfDoc
-      .roundedRect(50, yPos, 250, 28, 6)
-      .fillColor(greenPale)
-      .fill();
-
+    pdfDoc.roundedRect(50, yPos, 250, 28, 6).fillColor(greenPale).fill();
     pdfDoc
       .fontSize(10)
       .fillColor(greenDark)
       .font('Helvetica-Bold')
-      .text(`💳 ${(data.paymentMethod || 'cash_on_delivery').replace(/_/g, ' ').split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')}`, 65, yPos + 9);
+      .text(
+        `💳 ${(data.paymentMethod || 'cash_on_delivery')
+          .replace(/_/g, ' ')
+          .split(' ')
+          .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+          .join(' ')}`,
+        65,
+        yPos + 9
+      );
 
     yPos += 50;
 
-    // Thank you message
-    pdfDoc
-      .fontSize(12)
-      .fillColor(greenDark)
-      .font('Helvetica-Bold')
-      .text('شكراً لاختياركم مواسم الخير! 🌿', 50, yPos, { align: 'center', width: 495 });
+    // Arabic thank-you (correct RTL shaping)
+    if (hasArabicFonts) {
+      pdfDoc
+        .fontSize(14)
+        .fillColor(greenDark)
+        .font('Amiri-Bold')
+        .text(rtl('شكراً لاختياركم مواسم الخير! 🌿'), 50, yPos, { align: 'center', width: 495 });
+    } else {
+      pdfDoc
+        .fontSize(12)
+        .fillColor(greenDark)
+        .font('Helvetica-Bold')
+        .text('Thank you!', 50, yPos, { align: 'center', width: 495 });
+    }
 
-    yPos += 20;
+    yPos += 22;
 
     pdfDoc
       .fontSize(11)
-      .text('Thank you for choosing GreenHarvest!', 50, yPos, { align: 'center', width: 495 });
+      .fillColor(greenDark)
+      .font('Helvetica-Bold')
+      .text('Thank you for choosing Mawasem Alkhair!', 50, yPos, { align: 'center', width: 495 });
 
     yPos += 18;
 
@@ -426,15 +447,13 @@ export default async function handler(req, res) {
       .font('Helvetica')
       .text('For inquiries, contact us via WhatsApp or phone', 50, yPos, { align: 'center', width: 495 });
 
-    // Finalize PDF
     pdfDoc.end();
-
   } catch (err) {
     console.error('Invoice generation error:', err);
     if (!res.headersSent) {
-      return res.status(500).json({ 
+      return res.status(500).json({
         error: 'Failed to generate invoice',
-        details: err.message
+        details: err.message,
       });
     }
   }
