@@ -1,7 +1,7 @@
 {
   "functions": {
     "pages/api/**/*.js": {
-      "includeFiles": "public/fonts/**"
+      "includeFiles": ["public/fonts/**", "public/brand/**"]
     }
   }
 }

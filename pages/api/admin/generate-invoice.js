@@ -1,8 +1,10 @@
- // pages/api/admin/generate-invoice.js
-// Invoice with olive branch logo
+// pages/api/admin/generate-invoice.js
+// Invoice with olive branch logo + PNG logo image (if available)
 
 import { db } from '../../../lib/firebase-admin';
 import PDFDocument from 'pdfkit';
+import fs from 'fs';
+import path from 'path';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -53,26 +55,45 @@ export default async function handler(req, res) {
     let y = 45;
     const logoX = 50, logoSize = 55;
 
-    // Circular logo border
-    pdfDoc.circle(logoX + logoSize/2, y + logoSize/2, logoSize/2).strokeColor(green).lineWidth(2.5).stroke();
-    
-    // Olive branch stem
-    pdfDoc.moveTo(logoX + logoSize/2 - 15, y + logoSize/2 + 15)
-      .bezierCurveTo(logoX + logoSize/2 - 10, y + logoSize/2, logoX + logoSize/2 - 5, y + logoSize/2 - 10, logoX + logoSize/2 + 15, y + logoSize/2 - 15)
-      .strokeColor(green).lineWidth(2.5).stroke();
-    
-    // Olive leaves
-    [{ x: -12, y: 10, angle: -30 }, { x: -8, y: 5, angle: 30 }, { x: -4, y: 0, angle: -20 },
-     { x: 0, y: -5, angle: 25 }, { x: 5, y: -8, angle: -25 }, { x: 10, y: -12, angle: 20 }]
-      .forEach(leaf => {
-        pdfDoc.save().translate(logoX + logoSize/2 + leaf.x, y + logoSize/2 + leaf.y).rotate(leaf.angle);
-        pdfDoc.ellipse(0, 0, 5, 2.5).fillColor(green).fill();
-        pdfDoc.restore();
+    // ============================
+    // ✅ LOGO: Use PNG if available
+    // Put file here: public/brand/logo.png
+    // ============================
+    const logoPath = path.join(process.cwd(), 'public', 'brand', 'logo.png');
+    const hasLogoPng = fs.existsSync(logoPath);
+
+    if (hasLogoPng) {
+      // Draw the PNG logo (fits inside 55x55)
+      // If your PNG has whitespace, increase fit slightly (e.g. 58) or reduce padding below.
+      const pad = 0; // set to 4 if you want breathing room
+      pdfDoc.image(logoPath, logoX + pad, y + pad, {
+        fit: [logoSize - pad * 2, logoSize - pad * 2],
+        align: 'center',
+        valign: 'center'
       });
-    
-    // Olives
-    [{ x: -10, y: 8 }, { x: -2, y: -2 }, { x: 8, y: -10 }]
-      .forEach(o => pdfDoc.circle(logoX + logoSize/2 + o.x, y + logoSize/2 + o.y, 2.5).fillColor(green).fill());
+    } else {
+      // Fallback: draw your original olive-branch logo
+      pdfDoc.circle(logoX + logoSize/2, y + logoSize/2, logoSize/2).strokeColor(green).lineWidth(2.5).stroke();
+
+      pdfDoc.moveTo(logoX + logoSize/2 - 15, y + logoSize/2 + 15)
+        .bezierCurveTo(
+          logoX + logoSize/2 - 10, y + logoSize/2,
+          logoX + logoSize/2 - 5,  y + logoSize/2 - 10,
+          logoX + logoSize/2 + 15, y + logoSize/2 - 15
+        )
+        .strokeColor(green).lineWidth(2.5).stroke();
+
+      [{ x: -12, y: 10, angle: -30 }, { x: -8, y: 5, angle: 30 }, { x: -4, y: 0, angle: -20 },
+       { x: 0, y: -5, angle: 25 }, { x: 5, y: -8, angle: -25 }, { x: 10, y: -12, angle: 20 }]
+        .forEach(leaf => {
+          pdfDoc.save().translate(logoX + logoSize/2 + leaf.x, y + logoSize/2 + leaf.y).rotate(leaf.angle);
+          pdfDoc.ellipse(0, 0, 5, 2.5).fillColor(green).fill();
+          pdfDoc.restore();
+        });
+
+      [{ x: -10, y: 8 }, { x: -2, y: -2 }, { x: 8, y: -10 }]
+        .forEach(o => pdfDoc.circle(logoX + logoSize/2 + o.x, y + logoSize/2 + o.y, 2.5).fillColor(green).fill());
+    }
 
     // Company name
     pdfDoc.fontSize(24).fillColor(black).font('Helvetica-Bold').text('MAWASIM AL-KHAIR', logoX + logoSize + 18, y + 8);
@@ -102,8 +123,10 @@ export default async function handler(req, res) {
     [['Name:', customer.name], ['Phone:', customer.phone], ['Address:', customer.address]]
       .concat(customer.notes ? [['Notes:', customer.notes]] : [])
       .forEach(([label, value]) => {
-        pdfDoc.fontSize(10).fillColor(medGray).font('Helvetica-Bold').text(label, 50, y, { width: 70, continued: true })
-          .fillColor(gray).font('Helvetica').text(value, { width: 425 });
+        pdfDoc.fontSize(10).fillColor(medGray).font('Helvetica-Bold')
+          .text(label, 50, y, { width: 70, continued: true })
+          .fillColor(gray).font('Helvetica')
+          .text(value, { width: 425 });
         y += 16;
       });
     y += 15;
@@ -117,19 +140,24 @@ export default async function handler(req, res) {
     pdfDoc.moveTo(50, y).lineTo(545, y).strokeColor(green).lineWidth(1.5).stroke();
     y += 8;
     pdfDoc.fontSize(10).fillColor(black).font('Helvetica-Bold')
-      .text('ITEM', 55, y).text('QTY', 340, y, { width: 30, align: 'center' })
-      .text('PRICE', 390, y, { width: 50, align: 'right' }).text('TOTAL', 470, y, { width: 65, align: 'right' });
+      .text('ITEM', 55, y)
+      .text('QTY', 340, y, { width: 30, align: 'center' })
+      .text('PRICE', 390, y, { width: 50, align: 'right' })
+      .text('TOTAL', 470, y, { width: 65, align: 'right' });
     y += 15;
     pdfDoc.moveTo(50, y).lineTo(545, y).strokeColor(green).lineWidth(1).stroke();
     y += 10;
 
     items.forEach((item, i) => {
       const name = item.unit ? `${item.name} (${item.unit})` : item.name;
-      pdfDoc.fontSize(10).fillColor(gray).font('Helvetica').text(name, 55, y, { width: 275 })
+      pdfDoc.fontSize(10).fillColor(gray).font('Helvetica')
+        .text(name, 55, y, { width: 275 })
         .text(item.qty.toString(), 340, y, { width: 30, align: 'center' })
         .text(`€${item.price.toFixed(2)}`, 390, y, { width: 50, align: 'right' })
-        .font('Helvetica-Bold').fillColor(black).text(`€${(item.price * item.qty).toFixed(2)}`, 470, y, { width: 65, align: 'right' });
+        .font('Helvetica-Bold').fillColor(black)
+        .text(`€${(item.price * item.qty).toFixed(2)}`, 470, y, { width: 65, align: 'right' });
       y += 18;
+
       if (i < items.length - 1) {
         pdfDoc.moveTo(50, y).lineTo(545, y).strokeColor(border).lineWidth(0.5).stroke();
         y += 8;
@@ -141,28 +169,47 @@ export default async function handler(req, res) {
 
     // Totals
     const total = data.total || 0;
-    pdfDoc.fontSize(10).fillColor(medGray).font('Helvetica').text('Subtotal:', 390, y, { width: 70, align: 'right' })
+    pdfDoc.fontSize(10).fillColor(medGray).font('Helvetica')
+      .text('Subtotal:', 390, y, { width: 70, align: 'right' })
       .fillColor(gray).text(`€${total.toFixed(2)}`, 470, y, { width: 65, align: 'right' });
     y += 16;
-    pdfDoc.fillColor(medGray).text('Tax (0%):', 390, y, { width: 70, align: 'right' })
+
+    pdfDoc.fillColor(medGray)
+      .text('Tax (0%):', 390, y, { width: 70, align: 'right' })
       .fillColor(gray).text('€0.00', 470, y, { width: 65, align: 'right' });
     y += 16;
+
     pdfDoc.moveTo(390, y).lineTo(545, y).strokeColor(green).lineWidth(2).stroke();
     y += 10;
+
     pdfDoc.rect(390, y, 155, 32).fillColor(green).fill();
-    pdfDoc.fontSize(13).fillColor('white').font('Helvetica-Bold').text('TOTAL:', 400, y + 10, { width: 60, align: 'left' })
+    pdfDoc.fontSize(13).fillColor('white').font('Helvetica-Bold')
+      .text('TOTAL:', 400, y + 10, { width: 60, align: 'left' })
       .fontSize(14).text(`€${total.toFixed(2)}`, 470, y + 10, { width: 65, align: 'right' });
     y += 45;
 
     // Footer
     pdfDoc.fontSize(10).fillColor(medGray).font('Helvetica')
-      .text(`Payment Method: ${(data.paymentMethod || 'cash_on_delivery').replace(/_/g, ' ').split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')}`, 50, y);
+      .text(
+        `Payment Method: ${(data.paymentMethod || 'cash_on_delivery')
+          .replace(/_/g, ' ')
+          .split(' ')
+          .map(w => w.charAt(0).toUpperCase() + w.slice(1))
+          .join(' ')}`,
+        50,
+        y
+      );
     y += 35;
+
     pdfDoc.moveTo(50, y).lineTo(545, y).strokeColor(border).lineWidth(1).stroke();
     y += 15;
-    pdfDoc.fontSize(11).fillColor(black).font('Helvetica-Bold').text('Thank you for choosing Mawasim Al-Khair!', 50, y, { align: 'center', width: 495 });
+
+    pdfDoc.fontSize(11).fillColor(black).font('Helvetica-Bold')
+      .text('Thank you for choosing Mawasim Al-Khair!', 50, y, { align: 'center', width: 495 });
     y += 16;
-    pdfDoc.fontSize(9).fillColor(lightGray).font('Helvetica').text('For inquiries, contact us via WhatsApp or phone', 50, y, { align: 'center', width: 495 });
+
+    pdfDoc.fontSize(9).fillColor(lightGray).font('Helvetica')
+      .text('For inquiries, contact us via WhatsApp or phone', 50, y, { align: 'center', width: 495 });
 
     pdfDoc.end();
   } catch (err) {
