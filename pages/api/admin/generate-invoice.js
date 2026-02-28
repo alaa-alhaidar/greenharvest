@@ -59,7 +59,7 @@ export default async function handler(req, res) {
     // ✅ LOGO: Use PNG if available
     // Put file here: public/brand/logo.png
     // ============================
-    const logoPath = path.join(process.cwd(), 'public', 'brand', 'logo5.png');
+    const logoPath = path.join(process.cwd(), 'public', 'brand', 'logo14.png');
     const hasLogoPng = fs.existsSync(logoPath);
 
     if (hasLogoPng) {
