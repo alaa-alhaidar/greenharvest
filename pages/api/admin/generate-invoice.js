@@ -117,8 +117,8 @@ export default async function handler(req, res) {
       .fontSize(24)
       .fillColor(green)
       .font('Helvetica-Bold')
-      .text('MAWASIM AL-KHAIR', 110, yPos + 5)
-      .text('مواسم الخير', 110, yPos + 5);
+      .text('MAWASIM AL-KHAIR مواسم الخير', 110, yPos + 5);
+      
 
     pdfDoc
       .fontSize(11)
