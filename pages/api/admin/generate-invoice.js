@@ -1,15 +1,4 @@
 // pages/api/admin/generate-invoice.js
-// Arabic-only PDF invoice with olive branch logo (RTL + shaping) using PDFKit
-// Protected by ADMIN_SECRET env var.
-//
-// Requires:
-//   npm i bidi-js arabic-persian-reshaper
-//
-// Fonts: optional locally (recommended)
-//   public/fonts/Amiri-Regular.ttf
-//   public/fonts/Amiri-Bold.ttf
-// If missing, this code falls back to downloading Amiri from GitHub at runtime.
-
 import { db } from '../../../lib/firebase-admin';
 import PDFDocument from 'pdfkit';
 import fs from 'fs';
@@ -28,7 +17,7 @@ export default async function handler(req, res) {
     return res.status(422).json({ error: 'Invalid order ID' });
   }
 
-  // ---------- Arabic shaping (required for Arabic in PDFKit) ----------
+  // ---- Arabic shaping ----
   let bidi;
   let reshapeFn;
   try {
@@ -47,18 +36,23 @@ export default async function handler(req, res) {
     if (typeof reshapeFn !== 'function') throw new Error('reshape() not found');
   } catch (e) {
     return res.status(500).json({
-      error: 'Arabic shaping dependencies missing',
+      error: 'Arabic shaping deps missing',
       details: 'Run: npm i bidi-js arabic-persian-reshaper',
     });
   }
 
   const rtl = (s) => bidi.fromString(reshapeFn(String(s ?? ''))).writeReordered();
 
-  // ---------- Font loading (local or remote fallback) ----------
-  const REG_URL =
-    'https://github.com/google/fonts/raw/main/ofl/amiri/Amiri-Regular.ttf';
-  const BOLD_URL =
-    'https://github.com/google/fonts/raw/main/ofl/amiri/Amiri-Bold.ttf';
+  // ---- fetch fallback (Node 16/17) ----
+  let fetchFn = globalThis.fetch;
+  if (!fetchFn) {
+    const undici = await import('undici');
+    fetchFn = undici.fetch;
+  }
+
+  // ---- Fonts (local or remote) ----
+  const REG_URL = 'https://github.com/google/fonts/raw/main/ofl/amiri/Amiri-Regular.ttf';
+  const BOLD_URL = 'https://github.com/google/fonts/raw/main/ofl/amiri/Amiri-Bold.ttf';
 
   const fontRegularPath = path.join(process.cwd(), 'public', 'fonts', 'Amiri-Regular.ttf');
   const fontBoldPath = path.join(process.cwd(), 'public', 'fonts', 'Amiri-Bold.ttf');
@@ -67,14 +61,14 @@ export default async function handler(req, res) {
     try {
       if (fs.existsSync(localPath)) return fs.readFileSync(localPath);
     } catch (_) {}
-    // Remote fallback (works on Vercel)
-    const r = await fetch(remoteUrl);
+
+    const r = await fetchFn(remoteUrl);
     if (!r.ok) throw new Error(`Failed to download font: ${remoteUrl}`);
     const ab = await r.arrayBuffer();
     return Buffer.from(ab);
   }
 
-  // Cache fonts across invocations (best-effort)
+  // cache across invocations
   if (!globalThis.__AMIRI_FONTS__) globalThis.__AMIRI_FONTS__ = {};
   const cache = globalThis.__AMIRI_FONTS__;
 
@@ -91,10 +85,10 @@ export default async function handler(req, res) {
   }
 
   try {
-    const doc = await db.collection('orders').doc(orderId).get();
-    if (!doc.exists) return res.status(404).json({ error: 'Order not found' });
+    const snap = await db.collection('orders').doc(orderId).get();
+    if (!snap.exists) return res.status(404).json({ error: 'Order not found' });
 
-    const data = doc.data();
+    const data = snap.data();
 
     const customer = {
       name: data.customerName || data.customer?.name || 'غير معروف',
@@ -113,7 +107,7 @@ export default async function handler(req, res) {
     const orderDate =
       data.createdAt?.toDate?.() || (data.timestamp ? new Date(data.timestamp) : new Date());
 
-    const invoiceNumber = doc.id.slice(-6).toUpperCase();
+    const invoiceNumber = snap.id.slice(-6).toUpperCase();
     const status = (data.status || 'new').toLowerCase();
 
     const statusArabic = {
@@ -130,13 +124,11 @@ export default async function handler(req, res) {
     );
     const total = typeof data.total === 'number' ? data.total : computedTotal;
 
-    // Create PDF
     const pdfDoc = new PDFDocument({
       size: 'A4',
       margins: { top: 50, bottom: 50, left: 50, right: 50 },
     });
 
-    // Register fonts from buffers (works even if files not bundled)
     pdfDoc.registerFont('Amiri', amiriReg);
     pdfDoc.registerFont('Amiri-Bold', amiriBold);
 
@@ -144,7 +136,6 @@ export default async function handler(req, res) {
     res.setHeader('Content-Disposition', `attachment; filename="فاتورة-${invoiceNumber}.pdf"`);
     pdfDoc.pipe(res);
 
-    // Colors
     const green = '#2A6041';
     const black = '#000000';
     const gray = '#333333';
@@ -152,9 +143,8 @@ export default async function handler(req, res) {
     const lightGray = '#999999';
     const border = '#CCCCCC';
 
-    // Layout helpers
     const pageLeft = 50;
-    const pageRight = 545; // 595 - 50
+    const pageRight = 545;
     const contentW = pageRight - pageLeft;
 
     const rtext = (txt, x, y, w, opts = {}) =>
@@ -164,12 +154,12 @@ export default async function handler(req, res) {
 
     let y = 45;
     const logoSize = 55;
-
-    // ---------- LOGO on RIGHT ----------
     const logoX = pageRight - logoSize;
 
+    // Logo circle
     pdfDoc.circle(logoX + logoSize / 2, y + logoSize / 2, logoSize / 2).strokeColor(green).lineWidth(2.5).stroke();
 
+    // Olive branch stem
     pdfDoc
       .moveTo(logoX + logoSize / 2 - 15, y + logoSize / 2 + 15)
       .bezierCurveTo(
@@ -184,6 +174,7 @@ export default async function handler(req, res) {
       .lineWidth(2.5)
       .stroke();
 
+    // Leaves
     [
       { x: -12, y: 10, angle: -30 },
       { x: -8, y: 5, angle: 30 },
@@ -197,11 +188,12 @@ export default async function handler(req, res) {
       pdfDoc.restore();
     });
 
+    // Olives
     [{ x: -10, y: 8 }, { x: -2, y: -2 }, { x: 8, y: -10 }].forEach((o) => {
       pdfDoc.circle(logoX + logoSize / 2 + o.x, y + logoSize / 2 + o.y, 2.5).fillColor(green).fill();
     });
 
-    // ---------- COMPANY NAME (Arabic only) ----------
+    // Company name (Arabic)
     const headerTextW = contentW - (logoSize + 14);
 
     pdfDoc.font('Amiri-Bold').fontSize(28).fillColor(black);
@@ -214,11 +206,11 @@ export default async function handler(req, res) {
     pdfDoc.moveTo(pageLeft, y).lineTo(pageRight, y).strokeColor(black).lineWidth(2).stroke();
     y += 18;
 
-    // ---------- INVOICE HEADER ----------
+    // Invoice header
     pdfDoc.font('Amiri-Bold').fontSize(24).fillColor(black);
     rtext('فاتورة', pageLeft, y, contentW);
 
-    // invoice number box on LEFT
+    // Number box (left)
     const boxW = 155;
     pdfDoc.rect(pageLeft, y - 4, boxW, 36).strokeColor(green).lineWidth(2).stroke();
     pdfDoc.font('Amiri-Bold').fontSize(18).fillColor(green);
@@ -235,7 +227,7 @@ export default async function handler(req, res) {
     pdfDoc.text(rtl(`الحالة: ${st}`), pageLeft, y, { width: contentW, align: 'left' });
     y += 26;
 
-    // ---------- CUSTOMER ----------
+    // Customer
     pdfDoc.moveTo(pageLeft, y).lineTo(pageRight, y).strokeColor(border).lineWidth(1).stroke();
     y += 12;
 
@@ -261,7 +253,7 @@ export default async function handler(req, res) {
 
     y += 8;
 
-    // ---------- ITEMS TABLE ----------
+    // Items table header
     pdfDoc.moveTo(pageLeft, y).lineTo(pageRight, y).strokeColor(border).lineWidth(1).stroke();
     y += 12;
 
@@ -314,7 +306,7 @@ export default async function handler(req, res) {
     pdfDoc.moveTo(pageLeft, y).lineTo(pageRight, y).strokeColor(green).lineWidth(1.5).stroke();
     y += 18;
 
-    // ---------- TOTALS ----------
+    // Totals
     pdfDoc.font('Amiri').fontSize(11).fillColor(medGray);
     pdfDoc.text(rtl('المجموع الفرعي:'), pageLeft, y, { width: 120, align: 'right' });
     pdfDoc.text(rtl(fmtEUR(total)), pageLeft + 120, y, { width: 90, align: 'right' });
@@ -333,11 +325,9 @@ export default async function handler(req, res) {
     pdfDoc.text(rtl(fmtEUR(total)), pageLeft + 130, y + 8, { width: 70, align: 'right' });
     y += 50;
 
-    // ---------- FOOTER ----------
-    const paymentArabic = 'الدفع عند الاستلام';
-
+    // Footer
     pdfDoc.font('Amiri').fontSize(11).fillColor(medGray);
-    rtext(`طريقة الدفع: ${paymentArabic}`, pageLeft, y, contentW);
+    rtext('طريقة الدفع: الدفع عند الاستلام', pageLeft, y, contentW);
 
     y += 30;
     pdfDoc.moveTo(pageLeft, y).lineTo(pageRight, y).strokeColor(border).lineWidth(1).stroke();
@@ -348,10 +338,7 @@ export default async function handler(req, res) {
     y += 18;
 
     pdfDoc.font('Amiri').fontSize(10).fillColor(lightGray);
-    pdfDoc.text(rtl('للاستفسار، يرجى التواصل عبر واتساب أو الهاتف'), pageLeft, y, {
-      width: contentW,
-      align: 'center',
-    });
+    pdfDoc.text(rtl('للاستفسار، يرجى التواصل عبر واتساب أو الهاتف'), pageLeft, y, { width: contentW, align: 'center' });
 
     pdfDoc.end();
   } catch (err) {
