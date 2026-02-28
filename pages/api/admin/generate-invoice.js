@@ -1,5 +1,5 @@
-// pages/api/admin/generate-invoice.js
-// Generates a PDF invoice with professional logo and Arabic branding
+ // pages/api/admin/generate-invoice.js
+// Generates a printer-friendly PDF invoice with Arabic branding
 // Protected by ADMIN_SECRET env var.
 
 import { db } from '../../../lib/firebase-admin';
@@ -58,372 +58,325 @@ export default async function handler(req, res) {
 
     // Set response headers
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename="GreenHarvest-Invoice-${doc.id.slice(-6).toUpperCase()}.pdf"`);
+    res.setHeader('Content-Disposition', `attachment; filename="MawasimAlKhair-Invoice-${doc.id.slice(-6).toUpperCase()}.pdf"`);
 
     // Pipe PDF to response
     pdfDoc.pipe(res);
 
-    // Colors
-    const greenDark = '#1E3D2F';
-    const greenMid = '#2A6041';
-    const greenLight = '#4A9B6F';
-    const greenPale = '#E8F5EE';
-    const gold = '#C8790A';
-    const gray = '#4A4A4A';
+    // Minimal colors for printing
+    const darkGray = '#1A1A1A';
+    const mediumGray = '#4A4A4A';
     const lightGray = '#8A8A8A';
+    const borderColor = '#CCCCCC';
 
-    // ===== LOGO DESIGN =====
+    // ===== LOGO - Simple leaf icon =====
     
     const logoX = 50;
-    const logoY = 45;
-    const logoSize = 70;
+    const logoY = 50;
+    const logoSize = 50;
     
-    // Main circular logo background
+    // Simple circular outline
     pdfDoc
       .circle(logoX + logoSize/2, logoY + logoSize/2, logoSize/2)
-      .fillColor(greenDark)
-      .fill();
-    
-    // Inner circle (lighter green)
-    pdfDoc
-      .circle(logoX + logoSize/2, logoY + logoSize/2, logoSize/2 - 5)
-      .fillColor(greenMid)
-      .fill();
-    
-    // Draw stylized leaf in center
-    // Leaf stem
-    pdfDoc
-      .moveTo(logoX + logoSize/2, logoY + logoSize/2 + 15)
-      .lineTo(logoX + logoSize/2, logoY + logoSize/2 - 20)
-      .strokeColor('white')
-      .lineWidth(3)
+      .strokeColor(darkGray)
+      .lineWidth(2)
       .stroke();
     
-    // Leaf shape (right side)
-    pdfDoc.save();
+    // Simple leaf inside
     pdfDoc
-      .moveTo(logoX + logoSize/2, logoY + logoSize/2 - 20)
+      .moveTo(logoX + logoSize/2, logoY + logoSize/2 + 10)
+      .lineTo(logoX + logoSize/2, logoY + logoSize/2 - 15)
+      .strokeColor(darkGray)
+      .lineWidth(2)
+      .stroke();
+    
+    pdfDoc
+      .moveTo(logoX + logoSize/2, logoY + logoSize/2 - 15)
       .bezierCurveTo(
-        logoX + logoSize/2 + 15, logoY + logoSize/2 - 15,
-        logoX + logoSize/2 + 20, logoY + logoSize/2,
-        logoX + logoSize/2, logoY + logoSize/2 + 10
+        logoX + logoSize/2 + 12, logoY + logoSize/2 - 8,
+        logoX + logoSize/2 + 15, logoY + logoSize/2 + 2,
+        logoX + logoSize/2, logoY + logoSize/2 + 8
       )
-      .fillColor('white')
-      .fill();
-    pdfDoc.restore();
+      .strokeColor(darkGray)
+      .lineWidth(2)
+      .stroke();
     
-    // Leaf shape (left side)
-    pdfDoc.save();
     pdfDoc
-      .moveTo(logoX + logoSize/2, logoY + logoSize/2 - 20)
+      .moveTo(logoX + logoSize/2, logoY + logoSize/2 - 15)
       .bezierCurveTo(
-        logoX + logoSize/2 - 15, logoY + logoSize/2 - 15,
-        logoX + logoSize/2 - 20, logoY + logoSize/2,
-        logoX + logoSize/2, logoY + logoSize/2 + 10
+        logoX + logoSize/2 - 12, logoY + logoSize/2 - 8,
+        logoX + logoSize/2 - 15, logoY + logoSize/2 + 2,
+        logoX + logoSize/2, logoY + logoSize/2 + 8
       )
-      .fillColor('white')
-      .fill();
-    pdfDoc.restore();
-    
-    // Decorative dots around logo
-    const dots = 8;
-    for (let i = 0; i < dots; i++) {
-      const angle = (i / dots) * Math.PI * 2;
-      const dotX = logoX + logoSize/2 + Math.cos(angle) * (logoSize/2 + 8);
-      const dotY = logoY + logoSize/2 + Math.sin(angle) * (logoSize/2 + 8);
-      pdfDoc.circle(dotX, dotY, 2).fillColor(greenLight).fill();
-    }
+      .strokeColor(darkGray)
+      .lineWidth(2)
+      .stroke();
 
-    // ===== BRAND NAME =====
+    // ===== BRAND NAME - Arabic primary =====
     
-    const textX = logoX + logoSize + 20;
+    const textX = logoX + logoSize + 15;
     
-    // English name
+    // Arabic name - PRIMARY (larger, bold)
     pdfDoc
-      .fontSize(26)
-      .fillColor(greenDark)
+      .fontSize(22)
+      .fillColor(darkGray)
       .font('Helvetica-Bold')
-      .text('GreenHarvest', textX, logoY + 10);
+      .text('مواسم الخير', textX, logoY + 5);
 
-    // Arabic name (مواسم الخير)
-    // Note: Arabic text direction - written right-to-left
+    // English name - secondary (smaller)
     pdfDoc
-      .fontSize(18)
-      .fillColor(greenMid)
-      .font('Helvetica-Bold')
-      .text('مواسم الخير', textX, logoY + 38, { 
-        features: ['rtla']  // Right-to-left aware
-      });
-
-    // Tagline
-    pdfDoc
-      .fontSize(9)
-      .fillColor(greenLight)
+      .fontSize(12)
+      .fillColor(mediumGray)
       .font('Helvetica')
-      .text('Organic Products & Natural Foods', textX, logoY + 62);
+      .text('Mawasim Al-Khair (GreenHarvest)', textX, logoY + 32);
 
-    // Decorative line with gradient effect (simulated with multiple lines)
-    const lineY = logoY + logoSize + 15;
-    for (let i = 0; i < 3; i++) {
-      const opacity = 0.3 - (i * 0.1);
-      pdfDoc
-        .moveTo(50, lineY + i)
-        .lineTo(545, lineY + i)
-        .strokeColor(greenPale)
-        .opacity(1 - opacity)
-        .lineWidth(1)
-        .stroke();
-    }
-    pdfDoc.opacity(1); // Reset opacity
+    // Horizontal line
+    pdfDoc
+      .moveTo(50, logoY + logoSize + 20)
+      .lineTo(545, logoY + logoSize + 20)
+      .strokeColor(borderColor)
+      .lineWidth(1)
+      .stroke();
 
-    // Reset position
-    let yPos = lineY + 25;
+    let yPos = logoY + logoSize + 40;
 
-    // ===== INVOICE INFO BOX =====
+    // ===== INVOICE INFO =====
     
-    // Invoice info box background
-    pdfDoc
-      .roundedRect(50, yPos, 495, 65, 10)
-      .fillColor('#F8F6F1')
-      .fill();
-
-    // Invoice title
-    pdfDoc
-      .fontSize(20)
-      .fillColor(greenDark)
-      .font('Helvetica-Bold')
-      .text('INVOICE', 65, yPos + 15);
-
-    // Invoice number badge
-    pdfDoc
-      .roundedRect(380, yPos + 12, 150, 30, 6)
-      .fillColor(gold)
-      .fill();
-
+    // Invoice title and number in one line
     pdfDoc
       .fontSize(18)
-      .fillColor('white')
+      .fillColor(darkGray)
       .font('Helvetica-Bold')
-      .text(`#${doc.id.slice(-6).toUpperCase()}`, 380, yPos + 20, { width: 150, align: 'center' });
+      .text('INVOICE', 50, yPos);
+
+    pdfDoc
+      .fontSize(16)
+      .text(`#${doc.id.slice(-6).toUpperCase()}`, 420, yPos + 2, { width: 125, align: 'right' });
+
+    yPos += 30;
 
     // Date and Status
     pdfDoc
       .fontSize(10)
-      .fillColor(gray)
+      .fillColor(mediumGray)
       .font('Helvetica')
-      .text(`📅 ${orderDate.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}`, 380, yPos + 50, { width: 150, align: 'center' });
-
-    const statusEmoji = {
-      'new': '🆕',
-      'confirmed': '✅',
-      'preparing': '👨‍🍳',
-      'delivered': '📦',
-      'cancelled': '❌'
-    };
-    const statusText = (data.status || 'new').toLowerCase();
-    const emoji = statusEmoji[statusText] || '📋';
+      .text(`Date: ${orderDate.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}`, 50, yPos);
 
     pdfDoc
-      .text(`${emoji} ${statusText.charAt(0).toUpperCase() + statusText.slice(1)}`, 65, yPos + 50);
+      .text(`Status: ${(data.status || 'new').charAt(0).toUpperCase() + (data.status || 'new').slice(1).toLowerCase()}`, 420, yPos, { width: 125, align: 'right' });
 
-    yPos += 85;
+    yPos += 30;
 
-    // ===== CUSTOMER SECTION =====
-    
-    // "Bill To" header
+    // Divider line
     pdfDoc
-      .roundedRect(50, yPos, 495, 32, 8)
-      .fillColor(greenDark)
-      .fill();
-
-    pdfDoc
-      .fontSize(13)
-      .fillColor('white')
-      .font('Helvetica-Bold')
-      .text('👤 Bill To', 65, yPos + 10);
-
-    yPos += 42;
-
-    // Customer details box
-    pdfDoc
-      .roundedRect(50, yPos, 495, customer.notes ? 90 : 70, 8)
-      .strokeColor('#E2DDD5')
+      .moveTo(50, yPos)
+      .lineTo(545, yPos)
+      .strokeColor(borderColor)
       .lineWidth(1)
       .stroke();
 
-    const detailsY = yPos + 15;
+    yPos += 20;
 
+    // ===== CUSTOMER SECTION =====
+    
     pdfDoc
-      .fontSize(10)
-      .fillColor(greenDark)
+      .fontSize(12)
+      .fillColor(darkGray)
       .font('Helvetica-Bold')
-      .text('Name:', 65, detailsY)
-      .fillColor(gray)
-      .font('Helvetica')
-      .text(customer.name, 120, detailsY);
+      .text('Bill To:', 50, yPos);
 
-    pdfDoc
-      .fillColor(greenDark)
-      .font('Helvetica-Bold')
-      .text('Phone:', 65, detailsY + 18)
-      .fillColor(gray)
-      .font('Helvetica')
-      .text(customer.phone, 120, detailsY + 18);
+    yPos += 20;
 
-    pdfDoc
-      .fillColor(greenDark)
-      .font('Helvetica-Bold')
-      .text('Address:', 65, detailsY + 36)
-      .fillColor(gray)
-      .font('Helvetica')
-      .text(customer.address, 120, detailsY + 36, { width: 410 });
+    const customerDetails = [
+      ['Name:', customer.name],
+      ['Phone:', customer.phone],
+      ['Address:', customer.address]
+    ];
 
     if (customer.notes) {
-      pdfDoc
-        .fillColor(greenDark)
-        .font('Helvetica-Bold')
-        .text('Notes:', 65, detailsY + 54)
-        .fillColor(gray)
-        .font('Helvetica')
-        .text(customer.notes, 120, detailsY + 54, { width: 410 });
+      customerDetails.push(['Notes:', customer.notes]);
     }
 
-    yPos += (customer.notes ? 110 : 90);
+    customerDetails.forEach(([label, value]) => {
+      pdfDoc
+        .fontSize(10)
+        .fillColor(mediumGray)
+        .font('Helvetica-Bold')
+        .text(label, 50, yPos, { width: 60 })
+        .fillColor(darkGray)
+        .font('Helvetica')
+        .text(value, 115, yPos, { width: 430 });
+      yPos += 16;
+    });
+
+    yPos += 15;
 
     // ===== ITEMS TABLE =====
     
-    // Table header
     pdfDoc
-      .roundedRect(50, yPos, 495, 32, 8)
-      .fillColor(greenDark)
-      .fill();
-
-    pdfDoc
-      .fontSize(13)
-      .fillColor('white')
+      .fontSize(12)
+      .fillColor(darkGray)
       .font('Helvetica-Bold')
-      .text('📦 Order Items', 65, yPos + 10);
+      .text('Order Items:', 50, yPos);
 
-    yPos += 42;
-
-    // Column headers
-    pdfDoc
-      .fontSize(11)
-      .fillColor('white')
-      .font('Helvetica-Bold');
-
-    pdfDoc
-      .roundedRect(50, yPos, 495, 28, 6)
-      .fillColor(greenMid)
-      .fill();
-
-    pdfDoc
-      .text('Item', 60, yPos + 9)
-      .text('Qty', 320, yPos + 9, { width: 40, align: 'right' })
-      .text('Unit Price', 370, yPos + 9, { width: 70, align: 'right' })
-      .text('Total', 450, yPos + 9, { width: 85, align: 'right' });
-
-    yPos += 28;
-
-    // Table Rows
-    pdfDoc.fontSize(10).fillColor(gray).font('Helvetica');
-    
-    items.forEach((item, i) => {
-      const bgColor = i % 2 === 0 ? '#FFFFFF' : '#F8F6F1';
-      pdfDoc
-        .roundedRect(50, yPos, 495, 26, 4)
-        .fillColor(bgColor)
-        .fill();
-
-      const itemName = item.unit ? `${item.name} (${item.unit})` : item.name;
-      
-      pdfDoc
-        .fillColor(gray)
-        .text(itemName, 60, yPos + 9, { width: 250 })
-        .text(item.qty.toString(), 320, yPos + 9, { width: 40, align: 'right' })
-        .text(`€${item.price.toFixed(2)}`, 370, yPos + 9, { width: 70, align: 'right' })
-        .fillColor(greenDark)
-        .font('Helvetica-Bold')
-        .text(`€${(item.price * item.qty).toFixed(2)}`, 450, yPos + 9, { width: 85, align: 'right' });
-
-      yPos += 26;
-    });
-
-    // ===== TOTALS SECTION =====
-    
     yPos += 20;
-    const total = data.total || 0;
 
-    // Totals box
+    // Table header - simple line-based
     pdfDoc
-      .roundedRect(340, yPos, 205, 90, 10)
-      .fillColor('#F8F6F1')
-      .fill();
+      .moveTo(50, yPos)
+      .lineTo(545, yPos)
+      .strokeColor(darkGray)
+      .lineWidth(1.5)
+      .stroke();
 
-    // Subtotal
-    pdfDoc
-      .fontSize(11)
-      .fillColor(gray)
-      .font('Helvetica')
-      .text('Subtotal:', 360, yPos + 15, { width: 80, align: 'left' })
-      .text(`€${total.toFixed(2)}`, 450, yPos + 15, { width: 85, align: 'right' });
-
-    // Tax
-    pdfDoc
-      .text('Tax (0%):', 360, yPos + 35, { width: 80, align: 'left' })
-      .text('€0.00', 450, yPos + 35, { width: 85, align: 'right' });
-
-    // Total
-    pdfDoc
-      .roundedRect(350, yPos + 55, 185, 28, 6)
-      .fillColor(greenDark)
-      .fill();
-
-    pdfDoc
-      .fontSize(14)
-      .fillColor('white')
-      .font('Helvetica-Bold')
-      .text('TOTAL:', 365, yPos + 63, { width: 80, align: 'left' })
-      .fontSize(16)
-      .text(`€${total.toFixed(2)}`, 450, yPos + 62, { width: 75, align: 'right' });
-
-    // ===== PAYMENT & FOOTER =====
-    
-    yPos += 110;
-
-    // Payment method badge
-    pdfDoc
-      .roundedRect(50, yPos, 250, 28, 6)
-      .fillColor(greenPale)
-      .fill();
+    yPos += 10;
 
     pdfDoc
       .fontSize(10)
-      .fillColor(greenDark)
+      .fillColor(darkGray)
       .font('Helvetica-Bold')
-      .text(`💳 ${(data.paymentMethod || 'cash_on_delivery').replace(/_/g, ' ').split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')}`, 65, yPos + 9);
-
-    yPos += 50;
-
-    // Thank you message
-    pdfDoc
-      .fontSize(12)
-      .fillColor(greenDark)
-      .font('Helvetica-Bold')
-      .text('شكراً لاختياركم مواسم الخير! 🌿', 50, yPos, { align: 'center', width: 495 });
-
-    yPos += 20;
-
-    pdfDoc
-      .fontSize(11)
-      .text('Thank you for choosing GreenHarvest!', 50, yPos, { align: 'center', width: 495 });
+      .text('Item', 55, yPos)
+      .text('Qty', 330, yPos, { width: 30, align: 'right' })
+      .text('Price', 375, yPos, { width: 50, align: 'right' })
+      .text('Total', 460, yPos, { width: 75, align: 'right' });
 
     yPos += 18;
 
     pdfDoc
+      .moveTo(50, yPos)
+      .lineTo(545, yPos)
+      .strokeColor(darkGray)
+      .lineWidth(1)
+      .stroke();
+
+    yPos += 10;
+
+    // Table rows - minimal styling
+    pdfDoc.fontSize(10).fillColor(darkGray).font('Helvetica');
+    
+    items.forEach((item, i) => {
+      const itemName = item.unit ? `${item.name} (${item.unit})` : item.name;
+      
+      pdfDoc
+        .text(itemName, 55, yPos, { width: 265 })
+        .text(item.qty.toString(), 330, yPos, { width: 30, align: 'right' })
+        .text(`€${item.price.toFixed(2)}`, 375, yPos, { width: 50, align: 'right' })
+        .font('Helvetica-Bold')
+        .text(`€${(item.price * item.qty).toFixed(2)}`, 460, yPos, { width: 75, align: 'right' })
+        .font('Helvetica');
+
+      yPos += 20;
+      
+      // Light divider between items
+      if (i < items.length - 1) {
+        pdfDoc
+          .moveTo(50, yPos)
+          .lineTo(545, yPos)
+          .strokeColor(borderColor)
+          .lineWidth(0.5)
+          .stroke();
+        yPos += 10;
+      }
+    });
+
+    // Bottom border of table
+    pdfDoc
+      .moveTo(50, yPos)
+      .lineTo(545, yPos)
+      .strokeColor(darkGray)
+      .lineWidth(1)
+      .stroke();
+
+    yPos += 25;
+
+    // ===== TOTALS - Right aligned, minimal =====
+    
+    const total = data.total || 0;
+
+    // Subtotal
+    pdfDoc
+      .fontSize(10)
+      .fillColor(mediumGray)
+      .font('Helvetica')
+      .text('Subtotal:', 380, yPos, { width: 70, align: 'right' })
+      .fillColor(darkGray)
+      .text(`€${total.toFixed(2)}`, 460, yPos, { width: 75, align: 'right' });
+
+    yPos += 18;
+
+    // Tax
+    pdfDoc
+      .fillColor(mediumGray)
+      .text('Tax (0%):', 380, yPos, { width: 70, align: 'right' })
+      .fillColor(darkGray)
+      .text('€0.00', 460, yPos, { width: 75, align: 'right' });
+
+    yPos += 18;
+
+    // Line above total
+    pdfDoc
+      .moveTo(380, yPos)
+      .lineTo(545, yPos)
+      .strokeColor(darkGray)
+      .lineWidth(1.5)
+      .stroke();
+
+    yPos += 12;
+
+    // Total
+    pdfDoc
+      .fontSize(13)
+      .fillColor(darkGray)
+      .font('Helvetica-Bold')
+      .text('TOTAL:', 380, yPos, { width: 70, align: 'right' })
+      .fontSize(14)
+      .text(`€${total.toFixed(2)}`, 460, yPos, { width: 75, align: 'right' });
+
+    yPos += 35;
+
+    // ===== PAYMENT METHOD =====
+    
+    pdfDoc
+      .fontSize(10)
+      .fillColor(mediumGray)
+      .font('Helvetica')
+      .text(`Payment Method: ${(data.paymentMethod || 'cash_on_delivery').replace(/_/g, ' ').split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')}`, 50, yPos);
+
+    yPos += 40;
+
+    // Divider line
+    pdfDoc
+      .moveTo(50, yPos)
+      .lineTo(545, yPos)
+      .strokeColor(borderColor)
+      .lineWidth(1)
+      .stroke();
+
+    yPos += 20;
+
+    // ===== FOOTER =====
+    
+    // Arabic thank you
+    pdfDoc
+      .fontSize(11)
+      .fillColor(darkGray)
+      .font('Helvetica-Bold')
+      .text('شكراً لاختياركم مواسم الخير', 50, yPos, { align: 'center', width: 495 });
+
+    yPos += 18;
+
+    // English thank you
+    pdfDoc
+      .fontSize(10)
+      .fillColor(mediumGray)
+      .font('Helvetica')
+      .text('Thank you for choosing Mawasim Al-Khair (GreenHarvest)', 50, yPos, { align: 'center', width: 495 });
+
+    yPos += 15;
+
+    pdfDoc
       .fontSize(9)
       .fillColor(lightGray)
-      .font('Helvetica')
       .text('For inquiries, contact us via WhatsApp or phone', 50, yPos, { align: 'center', width: 495 });
 
     // Finalize PDF
