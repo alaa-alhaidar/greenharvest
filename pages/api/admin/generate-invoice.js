@@ -227,9 +227,132 @@ export default async function handler(req, res) {
     rtext('بيانات العميل', pageLeft, y, contentW);
     y += 18;
 
-    const customerRows = [
-      ['الاسم', customer.name],
-      ['الهاتف', customer.phone],
-      ['العنوان', customer.address],
-      ...(customer.notes ? [['ملاحظات', customer.notes]] : []),
-    ]
+    // Build customer rows (no spread => avoids parser issues)
+const customerRows = [
+  ['الاسم', customer.name],
+  ['الهاتف', customer.phone],
+  ['العنوان', customer.address],
+];
+
+if (customer.notes) {
+  customerRows.push(['ملاحظات', customer.notes]);
+}
+
+    customerRows.forEach(([label, value]) => {
+      pdfDoc.font('Amiri-Bold').fontSize(11).fillColor(medGray);
+      rtext(`${label}:`, pageRight - 160, y, 160);
+
+      pdfDoc.font('Amiri').fontSize(11).fillColor(gray);
+      // value column (wider) to the left of label
+      rtext(String(value), pageLeft, y, contentW - 170);
+      y += 18;
+    });
+
+    y += 8;
+
+    // ---------- ITEMS TABLE ----------
+    pdfDoc.moveTo(pageLeft, y).lineTo(pageRight, y).strokeColor(border).lineWidth(1).stroke();
+    y += 12;
+
+    pdfDoc.font('Amiri-Bold').fontSize(13).fillColor(black);
+    rtext('المنتجات', pageLeft, y, contentW);
+    y += 20;
+
+    // Table header line
+    pdfDoc.moveTo(pageLeft, y).lineTo(pageRight, y).strokeColor(green).lineWidth(1.5).stroke();
+    y += 8;
+
+    // Column layout (RTL):
+    // [المنتج | الكمية | السعر | المجموع]
+    const colTotalW = 90;
+    const colPriceW = 80;
+    const colQtyW = 55;
+    const colNameW = contentW - (colTotalW + colPriceW + colQtyW);
+
+    const colTotalX = pageLeft;
+    const colPriceX = colTotalX + colTotalW;
+    const colQtyX = colPriceX + colPriceW;
+    const colNameX = colQtyX + colQtyW;
+
+    pdfDoc.font('Amiri-Bold').fontSize(11).fillColor(black);
+    // headers
+    pdfDoc.text(rtl('المجموع'), colTotalX, y, { width: colTotalW, align: 'right' });
+    pdfDoc.text(rtl('السعر'), colPriceX, y, { width: colPriceW, align: 'right' });
+    pdfDoc.text(rtl('الكمية'), colQtyX, y, { width: colQtyW, align: 'right' });
+    pdfDoc.text(rtl('المنتج'), colNameX, y, { width: colNameW, align: 'right' });
+
+    y += 16;
+    pdfDoc.moveTo(pageLeft, y).lineTo(pageRight, y).strokeColor(green).lineWidth(1).stroke();
+    y += 10;
+
+    pdfDoc.font('Amiri').fontSize(11).fillColor(gray);
+
+    items.forEach((item, i) => {
+      const name = item.unit ? `${item.name} (${item.unit})` : item.name;
+      const itemTotal = Number(item.price || 0) * Number(item.qty || 0);
+
+      // row cells
+      pdfDoc.text(rtl(fmtEUR(itemTotal)), colTotalX, y, { width: colTotalW, align: 'right' });
+      pdfDoc.text(rtl(fmtEUR(item.price)), colPriceX, y, { width: colPriceW, align: 'right' });
+      pdfDoc.text(rtl(String(item.qty)), colQtyX, y, { width: colQtyW, align: 'right' });
+      pdfDoc.text(rtl(String(name)), colNameX, y, { width: colNameW, align: 'right' });
+
+      y += 20;
+      if (i < items.length - 1) {
+        pdfDoc.moveTo(pageLeft, y).lineTo(pageRight, y).strokeColor(border).lineWidth(0.5).stroke();
+        y += 8;
+      }
+    });
+
+    pdfDoc.moveTo(pageLeft, y).lineTo(pageRight, y).strokeColor(green).lineWidth(1.5).stroke();
+    y += 18;
+
+    // ---------- TOTALS (Arabic) ----------
+    pdfDoc.font('Amiri').fontSize(11).fillColor(medGray);
+    pdfDoc.text(rtl('المجموع الفرعي:'), pageLeft, y, { width: 120, align: 'right' });
+    pdfDoc.text(rtl(fmtEUR(total)), pageLeft + 120, y, { width: 90, align: 'right' });
+    y += 18;
+
+    pdfDoc.text(rtl('الضريبة (0%):'), pageLeft, y, { width: 120, align: 'right' });
+    pdfDoc.text(rtl('€0.00'), pageLeft + 120, y, { width: 90, align: 'right' });
+    y += 18;
+
+    pdfDoc.moveTo(pageLeft, y).lineTo(pageLeft + 210, y).strokeColor(green).lineWidth(2).stroke();
+    y += 10;
+
+    pdfDoc.rect(pageLeft, y, 210, 34).fillColor(green).fill();
+    pdfDoc.font('Amiri-Bold').fontSize(14).fillColor('white');
+    pdfDoc.text(rtl('المجموع الكلي:'), pageLeft + 10, y + 8, { width: 120, align: 'right' });
+    pdfDoc.text(rtl(fmtEUR(total)), pageLeft + 130, y + 8, { width: 70, align: 'right' });
+    y += 50;
+
+    // ---------- FOOTER (Arabic only) ----------
+    const payment = (data.paymentMethod || 'cash_on_delivery')
+      .replace(/_/g, ' ')
+      .trim();
+
+    const paymentArabic =
+      payment.includes('cash') ? 'الدفع عند الاستلام' : 'الدفع';
+
+    pdfDoc.font('Amiri').fontSize(11).fillColor(medGray);
+    rtext(`طريقة الدفع: ${paymentArabic}`, pageLeft, y, contentW);
+
+    y += 30;
+    pdfDoc.moveTo(pageLeft, y).lineTo(pageRight, y).strokeColor(border).lineWidth(1).stroke();
+    y += 12;
+
+    pdfDoc.font('Amiri-Bold').fontSize(13).fillColor(black);
+    pdfDoc.text(rtl('شكراً لاختياركم مواسم الخير! 🌿'), pageLeft, y, { width: contentW, align: 'center' });
+    y += 18;
+
+    pdfDoc.font('Amiri').fontSize(10).fillColor(lightGray);
+    pdfDoc.text(rtl('للاستفسار، يرجى التواصل عبر واتساب أو الهاتف'), pageLeft, y, { width: contentW, align: 'center' });
+
+    pdfDoc.end();
+  } catch (err) {
+    console.error('Invoice error:', err);
+    if (!res.headersSent) {
+      return res.status(500).json({ error: 'Failed to generate invoice', details: err.message });
+    }
+  }
+}
