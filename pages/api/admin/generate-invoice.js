@@ -1,5 +1,5 @@
- // pages/api/admin/generate-invoice.js
-// Generates a printer-friendly PDF invoice with Arabic branding
+// pages/api/admin/generate-invoice.js
+// Generates a clean, printer-friendly PDF invoice
 // Protected by ADMIN_SECRET env var.
 
 import { db } from '../../../lib/firebase-admin';
@@ -63,111 +63,116 @@ export default async function handler(req, res) {
     // Pipe PDF to response
     pdfDoc.pipe(res);
 
-    // Minimal colors for printing
-    const darkGray = '#1A1A1A';
-    const mediumGray = '#4A4A4A';
-    const lightGray = '#8A8A8A';
+    // Black and white for printing
+    const black = '#000000';
+    const darkGray = '#333333';
+    const mediumGray = '#666666';
+    const lightGray = '#999999';
     const borderColor = '#CCCCCC';
 
-    // ===== LOGO - Simple leaf icon =====
+    let yPos = 50;
+
+    // ===== HEADER =====
     
-    const logoX = 50;
-    const logoY = 50;
-    const logoSize = 50;
-    
-    // Simple circular outline
+    // Logo - Simple leaf icon
+    const logoSize = 45;
     pdfDoc
-      .circle(logoX + logoSize/2, logoY + logoSize/2, logoSize/2)
-      .strokeColor(darkGray)
-      .lineWidth(2)
+      .circle(50 + logoSize/2, yPos + logoSize/2, logoSize/2)
+      .strokeColor(black)
+      .lineWidth(2.5)
       .stroke();
     
-    // Simple leaf inside
+    // Leaf inside
     pdfDoc
-      .moveTo(logoX + logoSize/2, logoY + logoSize/2 + 10)
-      .lineTo(logoX + logoSize/2, logoY + logoSize/2 - 15)
-      .strokeColor(darkGray)
-      .lineWidth(2)
+      .moveTo(50 + logoSize/2, yPos + logoSize/2 + 8)
+      .lineTo(50 + logoSize/2, yPos + logoSize/2 - 12)
+      .strokeColor(black)
+      .lineWidth(2.5)
       .stroke();
     
     pdfDoc
-      .moveTo(logoX + logoSize/2, logoY + logoSize/2 - 15)
+      .moveTo(50 + logoSize/2, yPos + logoSize/2 - 12)
       .bezierCurveTo(
-        logoX + logoSize/2 + 12, logoY + logoSize/2 - 8,
-        logoX + logoSize/2 + 15, logoY + logoSize/2 + 2,
-        logoX + logoSize/2, logoY + logoSize/2 + 8
+        50 + logoSize/2 + 10, yPos + logoSize/2 - 6,
+        50 + logoSize/2 + 12, yPos + logoSize/2 + 2,
+        50 + logoSize/2, yPos + logoSize/2 + 6
       )
-      .strokeColor(darkGray)
-      .lineWidth(2)
+      .strokeColor(black)
+      .lineWidth(2.5)
       .stroke();
     
     pdfDoc
-      .moveTo(logoX + logoSize/2, logoY + logoSize/2 - 15)
+      .moveTo(50 + logoSize/2, yPos + logoSize/2 - 12)
       .bezierCurveTo(
-        logoX + logoSize/2 - 12, logoY + logoSize/2 - 8,
-        logoX + logoSize/2 - 15, logoY + logoSize/2 + 2,
-        logoX + logoSize/2, logoY + logoSize/2 + 8
+        50 + logoSize/2 - 10, yPos + logoSize/2 - 6,
+        50 + logoSize/2 - 12, yPos + logoSize/2 + 2,
+        50 + logoSize/2, yPos + logoSize/2 + 6
       )
-      .strokeColor(darkGray)
-      .lineWidth(2)
+      .strokeColor(black)
+      .lineWidth(2.5)
       .stroke();
 
-    // ===== BRAND NAME - Arabic primary =====
-    
-    const textX = logoX + logoSize + 15;
-    
-    // Arabic name - PRIMARY (larger, bold)
+    // Company name
     pdfDoc
-      .fontSize(22)
-      .fillColor(darkGray)
+      .fontSize(24)
+      .fillColor(black)
       .font('Helvetica-Bold')
-      .text('مواسم الخير', textX, logoY + 5);
+      .text('MAWASIM AL-KHAIR', 110, yPos + 5);
 
-    // English name - secondary (smaller)
     pdfDoc
-      .fontSize(12)
-      .fillColor(mediumGray)
+      .fontSize(11)
+      .fillColor(darkGray)
       .font('Helvetica')
-      .text('Mawasim Al-Khair (GreenHarvest)', textX, logoY + 32);
+      .text('Organic Products & Natural Foods', 110, yPos + 32);
+
+    yPos += logoSize + 20;
 
     // Horizontal line
     pdfDoc
-      .moveTo(50, logoY + logoSize + 20)
-      .lineTo(545, logoY + logoSize + 20)
-      .strokeColor(borderColor)
-      .lineWidth(1)
+      .moveTo(50, yPos)
+      .lineTo(545, yPos)
+      .strokeColor(black)
+      .lineWidth(2)
       .stroke();
 
-    let yPos = logoY + logoSize + 40;
+    yPos += 25;
 
     // ===== INVOICE INFO =====
     
-    // Invoice title and number in one line
     pdfDoc
-      .fontSize(18)
-      .fillColor(darkGray)
+      .fontSize(22)
+      .fillColor(black)
       .font('Helvetica-Bold')
       .text('INVOICE', 50, yPos);
 
+    // Invoice number in box
     pdfDoc
-      .fontSize(16)
-      .text(`#${doc.id.slice(-6).toUpperCase()}`, 420, yPos + 2, { width: 125, align: 'right' });
+      .rect(400, yPos - 5, 145, 35)
+      .strokeColor(black)
+      .lineWidth(2)
+      .stroke();
 
-    yPos += 30;
+    pdfDoc
+      .fontSize(18)
+      .text(`#${doc.id.slice(-6).toUpperCase()}`, 400, yPos + 5, { width: 145, align: 'center' });
+
+    yPos += 45;
 
     // Date and Status
     pdfDoc
       .fontSize(10)
-      .fillColor(mediumGray)
+      .fillColor(darkGray)
       .font('Helvetica')
       .text(`Date: ${orderDate.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}`, 50, yPos);
 
+    const statusText = (data.status || 'new').toLowerCase();
     pdfDoc
-      .text(`Status: ${(data.status || 'new').charAt(0).toUpperCase() + (data.status || 'new').slice(1).toLowerCase()}`, 420, yPos, { width: 125, align: 'right' });
+      .text(`Status: ${statusText.charAt(0).toUpperCase() + statusText.slice(1)}`, 400, yPos, { width: 145, align: 'right' });
 
     yPos += 30;
 
-    // Divider line
+    // ===== CUSTOMER SECTION =====
+    
     pdfDoc
       .moveTo(50, yPos)
       .lineTo(545, yPos)
@@ -175,15 +180,13 @@ export default async function handler(req, res) {
       .lineWidth(1)
       .stroke();
 
-    yPos += 20;
+    yPos += 15;
 
-    // ===== CUSTOMER SECTION =====
-    
     pdfDoc
       .fontSize(12)
-      .fillColor(darkGray)
+      .fillColor(black)
       .font('Helvetica-Bold')
-      .text('Bill To:', 50, yPos);
+      .text('BILL TO:', 50, yPos);
 
     yPos += 20;
 
@@ -202,10 +205,10 @@ export default async function handler(req, res) {
         .fontSize(10)
         .fillColor(mediumGray)
         .font('Helvetica-Bold')
-        .text(label, 50, yPos, { width: 60 })
+        .text(label, 50, yPos, { width: 70, continued: true })
         .fillColor(darkGray)
         .font('Helvetica')
-        .text(value, 115, yPos, { width: 430 });
+        .text(value, { width: 425 });
       yPos += 16;
     });
 
@@ -214,60 +217,69 @@ export default async function handler(req, res) {
     // ===== ITEMS TABLE =====
     
     pdfDoc
+      .moveTo(50, yPos)
+      .lineTo(545, yPos)
+      .strokeColor(borderColor)
+      .lineWidth(1)
+      .stroke();
+
+    yPos += 15;
+
+    pdfDoc
       .fontSize(12)
-      .fillColor(darkGray)
+      .fillColor(black)
       .font('Helvetica-Bold')
-      .text('Order Items:', 50, yPos);
+      .text('ORDER ITEMS:', 50, yPos);
 
-    yPos += 20;
+    yPos += 22;
 
-    // Table header - simple line-based
+    // Table header
     pdfDoc
       .moveTo(50, yPos)
       .lineTo(545, yPos)
-      .strokeColor(darkGray)
+      .strokeColor(black)
       .lineWidth(1.5)
       .stroke();
 
-    yPos += 10;
+    yPos += 8;
 
     pdfDoc
       .fontSize(10)
-      .fillColor(darkGray)
+      .fillColor(black)
       .font('Helvetica-Bold')
-      .text('Item', 55, yPos)
-      .text('Qty', 330, yPos, { width: 30, align: 'right' })
-      .text('Price', 375, yPos, { width: 50, align: 'right' })
-      .text('Total', 460, yPos, { width: 75, align: 'right' });
+      .text('ITEM', 55, yPos)
+      .text('QTY', 340, yPos, { width: 30, align: 'center' })
+      .text('PRICE', 390, yPos, { width: 50, align: 'right' })
+      .text('TOTAL', 470, yPos, { width: 65, align: 'right' });
 
-    yPos += 18;
+    yPos += 15;
 
     pdfDoc
       .moveTo(50, yPos)
       .lineTo(545, yPos)
-      .strokeColor(darkGray)
+      .strokeColor(black)
       .lineWidth(1)
       .stroke();
 
     yPos += 10;
 
-    // Table rows - minimal styling
+    // Table rows
     pdfDoc.fontSize(10).fillColor(darkGray).font('Helvetica');
     
     items.forEach((item, i) => {
       const itemName = item.unit ? `${item.name} (${item.unit})` : item.name;
       
       pdfDoc
-        .text(itemName, 55, yPos, { width: 265 })
-        .text(item.qty.toString(), 330, yPos, { width: 30, align: 'right' })
-        .text(`€${item.price.toFixed(2)}`, 375, yPos, { width: 50, align: 'right' })
+        .text(itemName, 55, yPos, { width: 275 })
+        .text(item.qty.toString(), 340, yPos, { width: 30, align: 'center' })
+        .text(`€${item.price.toFixed(2)}`, 390, yPos, { width: 50, align: 'right' })
         .font('Helvetica-Bold')
-        .text(`€${(item.price * item.qty).toFixed(2)}`, 460, yPos, { width: 75, align: 'right' })
-        .font('Helvetica');
+        .fillColor(black)
+        .text(`€${(item.price * item.qty).toFixed(2)}`, 470, yPos, { width: 65, align: 'right' });
 
-      yPos += 20;
+      yPos += 18;
       
-      // Light divider between items
+      // Divider between items
       if (i < items.length - 1) {
         pdfDoc
           .moveTo(50, yPos)
@@ -275,21 +287,21 @@ export default async function handler(req, res) {
           .strokeColor(borderColor)
           .lineWidth(0.5)
           .stroke();
-        yPos += 10;
+        yPos += 8;
       }
     });
 
-    // Bottom border of table
+    // Bottom border
     pdfDoc
       .moveTo(50, yPos)
       .lineTo(545, yPos)
-      .strokeColor(darkGray)
-      .lineWidth(1)
+      .strokeColor(black)
+      .lineWidth(1.5)
       .stroke();
 
-    yPos += 25;
+    yPos += 20;
 
-    // ===== TOTALS - Right aligned, minimal =====
+    // ===== TOTALS =====
     
     const total = data.total || 0;
 
@@ -298,43 +310,48 @@ export default async function handler(req, res) {
       .fontSize(10)
       .fillColor(mediumGray)
       .font('Helvetica')
-      .text('Subtotal:', 380, yPos, { width: 70, align: 'right' })
+      .text('Subtotal:', 390, yPos, { width: 70, align: 'right' })
       .fillColor(darkGray)
-      .text(`€${total.toFixed(2)}`, 460, yPos, { width: 75, align: 'right' });
+      .text(`€${total.toFixed(2)}`, 470, yPos, { width: 65, align: 'right' });
 
-    yPos += 18;
+    yPos += 16;
 
     // Tax
     pdfDoc
       .fillColor(mediumGray)
-      .text('Tax (0%):', 380, yPos, { width: 70, align: 'right' })
+      .text('Tax (0%):', 390, yPos, { width: 70, align: 'right' })
       .fillColor(darkGray)
-      .text('€0.00', 460, yPos, { width: 75, align: 'right' });
+      .text('€0.00', 470, yPos, { width: 65, align: 'right' });
 
-    yPos += 18;
+    yPos += 16;
 
     // Line above total
     pdfDoc
-      .moveTo(380, yPos)
+      .moveTo(390, yPos)
       .lineTo(545, yPos)
-      .strokeColor(darkGray)
-      .lineWidth(1.5)
+      .strokeColor(black)
+      .lineWidth(2)
       .stroke();
 
-    yPos += 12;
+    yPos += 10;
 
-    // Total
+    // Total box
+    pdfDoc
+      .rect(390, yPos, 155, 32)
+      .fillColor(black)
+      .fill();
+
     pdfDoc
       .fontSize(13)
-      .fillColor(darkGray)
+      .fillColor('white')
       .font('Helvetica-Bold')
-      .text('TOTAL:', 380, yPos, { width: 70, align: 'right' })
+      .text('TOTAL:', 400, yPos + 10, { width: 60, align: 'left' })
       .fontSize(14)
-      .text(`€${total.toFixed(2)}`, 460, yPos, { width: 75, align: 'right' });
+      .text(`€${total.toFixed(2)}`, 470, yPos + 10, { width: 65, align: 'right' });
 
-    yPos += 35;
+    yPos += 45;
 
-    // ===== PAYMENT METHOD =====
+    // ===== PAYMENT =====
     
     pdfDoc
       .fontSize(10)
@@ -342,9 +359,10 @@ export default async function handler(req, res) {
       .font('Helvetica')
       .text(`Payment Method: ${(data.paymentMethod || 'cash_on_delivery').replace(/_/g, ' ').split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')}`, 50, yPos);
 
-    yPos += 40;
+    yPos += 35;
 
-    // Divider line
+    // ===== FOOTER =====
+    
     pdfDoc
       .moveTo(50, yPos)
       .lineTo(545, yPos)
@@ -352,31 +370,20 @@ export default async function handler(req, res) {
       .lineWidth(1)
       .stroke();
 
-    yPos += 20;
+    yPos += 15;
 
-    // ===== FOOTER =====
-    
-    // Arabic thank you
     pdfDoc
       .fontSize(11)
-      .fillColor(darkGray)
+      .fillColor(black)
       .font('Helvetica-Bold')
-      .text('شكراً لاختياركم مواسم الخير', 50, yPos, { align: 'center', width: 495 });
+      .text('Thank you for choosing Mawasim Al-Khair!', 50, yPos, { align: 'center', width: 495 });
 
-    yPos += 18;
-
-    // English thank you
-    pdfDoc
-      .fontSize(10)
-      .fillColor(mediumGray)
-      .font('Helvetica')
-      .text('Thank you for choosing Mawasim Al-Khair (GreenHarvest)', 50, yPos, { align: 'center', width: 495 });
-
-    yPos += 15;
+    yPos += 16;
 
     pdfDoc
       .fontSize(9)
       .fillColor(lightGray)
+      .font('Helvetica')
       .text('For inquiries, contact us via WhatsApp or phone', 50, yPos, { align: 'center', width: 495 });
 
     // Finalize PDF
