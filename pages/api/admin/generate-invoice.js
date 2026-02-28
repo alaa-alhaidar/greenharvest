@@ -115,9 +115,10 @@ export default async function handler(req, res) {
     // Company name
     pdfDoc
       .fontSize(24)
-      .fillColor(black)
+      .fillColor(green)
       .font('Helvetica-Bold')
-      .text('MAWASIM AL-KHAIR', 110, yPos + 5);
+      .text('MAWASIM AL-KHAIR', 110, yPos + 5)
+      .text('مواسم الخير', 110, yPos + 5);
 
     pdfDoc
       .fontSize(11)
