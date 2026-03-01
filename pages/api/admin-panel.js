@@ -11,7 +11,7 @@ export default function handler(req, res) {
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 <meta name="robots" content="noindex, nofollow"/>
-<title>GreenHarvest · Admin</title>
+<title>مواسم الخير · لوحة التحكم</title>
 <link href="https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
 <style>
 :root {
@@ -197,10 +197,12 @@ body{font-family:'Sora',sans-serif;background:var(--off-white);color:var(--text-
   </div>
   <div class="login-box">
     <div class="login-logo">
-      <div class="logo-icon">🌿</div>
+      <div class="logo-icon">
+        <img src="/brand/logo17.png" alt="مواسم الخير" style="width: 60px; height: 60px; border-radius: 12px; border: 3px solid rgba(255,255,255,0.2);">
+      </div>
       <div class="login-logo-text">
-        <h1 style="font-size:18px;font-weight:800;color:#fff;letter-spacing:-.3px;">GreenHarvest</h1>
-        <span style="font-size:11px;color:rgba(255,255,255,.4);display:block;margin-top:1px;">Admin Dashboard</span>
+        <h1 style="font-size:18px;font-weight:800;color:#fff;letter-spacing:-.3px;">مواسم الخير</h1>
+        <span style="font-size:11px;color:rgba(255,255,255,.4);display:block;margin-top:1px;">MAWASEM AL-KHAIR</span>
       </div>
     </div>
     <div class="login-title">Welcome back</div>
@@ -231,8 +233,9 @@ body{font-family:'Sora',sans-serif;background:var(--off-white);color:var(--text-
 <!-- SIDEBAR -->
 <aside class="sidebar">
   <div class="sidebar-logo">
-    <h1>🌿 GreenHarvest</h1>
-    <span>Admin Dashboard</span>
+    <img src="/brand/logo17.png" alt="مواسم الخير" style="width: 50px; height: 50px; border-radius: 10px; margin-bottom: 8px;">
+    <h1 style="font-size: 16px; margin: 0;">مواسم الخير</h1>
+    <span>MAWASEM AL-KHAIR</span>
   </div>
   <nav class="sidebar-nav">
     <button class="nav-item active" id="nav-analytics" onclick="showTab('analytics')">
@@ -260,7 +263,7 @@ body{font-family:'Sora',sans-serif;background:var(--off-white);color:var(--text-
       <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
       <span>Logout</span>
     </button>
-    <div style="padding:8px 2px 0;font-size:11px;color:rgba(255,255,255,.2);">v2.0 · GreenHarvest</div>
+    <div style="padding:8px 2px 0;font-size:11px;color:rgba(255,255,255,.2);">v2.0 · مواسم الخير</div>
   </div>
 </aside>
 
@@ -626,7 +629,7 @@ function renderOrders() {
     }).join('');
 
     var waMsg = encodeURIComponent(
-      '✅ Hello '+cust.name+'!\\nYour GreenHarvest order #'+shortId+' is confirmed!\\nTotal: €'+total.toFixed(2)+'\\nPayment: Cash on delivery 💵\\n\\nThank you! 🌿'
+      '✅ مرحباً '+cust.name+'!\\nتم تأكيد طلبك #'+shortId+' من مواسم الخير\\nالمجموع: €'+total.toFixed(2)+'\\nالدفع: عند الاستلام 💵\\n\\nشكراً لك! 🌿'
     );
 
     var actions = '';
@@ -809,7 +812,7 @@ function renderCustomers() {
   tbody.innerHTML = allCustomers.map(function(c, i) {
     var phone = (c.phone || '').replace(/\\s/g, '').replace('+', '');
     var waMsg = encodeURIComponent(
-      'Hello ' + c.name + '!\\n\\nThank you for being a valued GreenHarvest customer! 🌿\\n\\nWe hope you enjoyed your orders. Let us know if you need anything!'
+      'مرحباً ' + c.name + '!\\n\\nشكراً لك لكونك عميلاً عزيزاً في مواسم الخير! 🌿\\n\\nنتمنى أن تكون استمتعت بطلباتك. أخبرنا إذا كنت بحاجة لأي شيء!'
     );
 
     return '<tr>'
@@ -861,7 +864,7 @@ function generateInvoice(orderId) {
       var url = window.URL.createObjectURL(blob);
       var a = document.createElement('a');
       a.href = url;
-      a.download = 'GreenHarvest-Invoice-' + orderId.slice(-6).toUpperCase() + '.pdf';
+      a.download = 'MawasemAlKhair-Invoice-' + orderId.slice(-6).toUpperCase() + '.pdf';
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
