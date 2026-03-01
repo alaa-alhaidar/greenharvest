@@ -198,7 +198,7 @@ body{font-family:'Sora',sans-serif;background:var(--off-white);color:var(--text-
   <div class="login-box">
     <div class="login-logo">
       <div class="logo-icon">
-        <img src="/brand/logo17.png" alt="مواسم الخير" style="width: 60px; height: 60px; border-radius: 12px; border: 3px solid rgba(255,255,255,0.2);">
+        <img src="/brand/logo17.png" alt="مواسم الخير" style="width: 70px; height: 70px; border-radius: 12px; border: 3px solid rgba(255,255,255,0.2);">
       </div>
       <div class="login-logo-text">
         <h1 style="font-size:18px;font-weight:800;color:#fff;letter-spacing:-.3px;">مواسم الخير</h1>

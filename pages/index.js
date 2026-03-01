@@ -182,7 +182,7 @@ export default function Home() {
               src="/brand/logo17.png" 
               alt="مواسم الخير"
               style={{
-                width: 40, height: 40, borderRadius: 11,
+                width: 60, height: 60, borderRadius: 11,
                 objectFit: 'cover'
               }}
             />
