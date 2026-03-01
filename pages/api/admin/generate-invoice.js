@@ -73,7 +73,7 @@ export default async function handler(req, res) {
       });
     } else {
       // Fallback: draw your original olive-branch logo
-      pdfDoc.circle(logoX + logoSize/2, y + logoSize/2, logoSize/2).strokeColor(green).lineWidth(2.5).stroke();
+      pdfDoc.circle(logoX + logoSize/2, y + logoSize/2, logoSize/2).strokeColor(black).lineWidth(2.5).stroke();
 
       pdfDoc.moveTo(logoX + logoSize/2 - 15, y + logoSize/2 + 15)
         .bezierCurveTo(
@@ -81,18 +81,18 @@ export default async function handler(req, res) {
           logoX + logoSize/2 - 5,  y + logoSize/2 - 10,
           logoX + logoSize/2 + 15, y + logoSize/2 - 15
         )
-        .strokeColor(green).lineWidth(2.5).stroke();
+        .strokeColor(black).lineWidth(2.5).stroke();
 
       [{ x: -12, y: 10, angle: -30 }, { x: -8, y: 5, angle: 30 }, { x: -4, y: 0, angle: -20 },
        { x: 0, y: -5, angle: 25 }, { x: 5, y: -8, angle: -25 }, { x: 10, y: -12, angle: 20 }]
         .forEach(leaf => {
           pdfDoc.save().translate(logoX + logoSize/2 + leaf.x, y + logoSize/2 + leaf.y).rotate(leaf.angle);
-          pdfDoc.ellipse(0, 0, 5, 2.5).fillColor(green).fill();
+          pdfDoc.ellipse(0, 0, 5, 2.5).fillColor(black).fill();
           pdfDoc.restore();
         });
 
       [{ x: -10, y: 8 }, { x: -2, y: -2 }, { x: 8, y: -10 }]
-        .forEach(o => pdfDoc.circle(logoX + logoSize/2 + o.x, y + logoSize/2 + o.y, 2.5).fillColor(green).fill());
+        .forEach(o => pdfDoc.circle(logoX + logoSize/2 + o.x, y + logoSize/2 + o.y, 2.5).fillColor(black).fill());
     }
 
     // Company name
@@ -105,8 +105,8 @@ export default async function handler(req, res) {
 
     // Invoice header
     pdfDoc.fontSize(22).fillColor(black).font('Helvetica-Bold').text('INVOICE', 50, y);
-    pdfDoc.rect(400, y - 5, 145, 35).strokeColor(green).lineWidth(2).stroke();
-    pdfDoc.fontSize(18).fillColor(green).text(`#${doc.id.slice(-6).toUpperCase()}`, 400, y + 5, { width: 145, align: 'center' });
+    pdfDoc.rect(400, y - 5, 145, 35).strokeColor(black).lineWidth(2).stroke();
+    pdfDoc.fontSize(18).fillColor(black).text(`#${doc.id.slice(-6).toUpperCase()}`, 400, y + 5, { width: 145, align: 'center' });
     y += 45;
 
     pdfDoc.fontSize(10).fillColor(gray).font('Helvetica')
@@ -137,7 +137,7 @@ export default async function handler(req, res) {
     pdfDoc.fontSize(12).fillColor(black).font('Helvetica-Bold').text('ORDER ITEMS:', 50, y);
     y += 22;
 
-    pdfDoc.moveTo(50, y).lineTo(545, y).strokeColor(green).lineWidth(1.5).stroke();
+    pdfDoc.moveTo(50, y).lineTo(545, y).strokeColor(black).lineWidth(1.5).stroke();
     y += 8;
     pdfDoc.fontSize(10).fillColor(black).font('Helvetica-Bold')
       .text('ITEM', 55, y)
@@ -145,7 +145,7 @@ export default async function handler(req, res) {
       .text('PRICE', 390, y, { width: 50, align: 'right' })
       .text('TOTAL', 470, y, { width: 65, align: 'right' });
     y += 15;
-    pdfDoc.moveTo(50, y).lineTo(545, y).strokeColor(green).lineWidth(1).stroke();
+    pdfDoc.moveTo(50, y).lineTo(545, y).strokeColor(black).lineWidth(1).stroke();
     y += 10;
 
     items.forEach((item, i) => {
@@ -164,7 +164,7 @@ export default async function handler(req, res) {
       }
     });
 
-    pdfDoc.moveTo(50, y).lineTo(545, y).strokeColor(green).lineWidth(1.5).stroke();
+    pdfDoc.moveTo(50, y).lineTo(545, y).strokeColor(black).lineWidth(1.5).stroke();
     y += 20;
 
     // Totals
@@ -179,11 +179,11 @@ export default async function handler(req, res) {
       .fillColor(gray).text('€0.00', 470, y, { width: 65, align: 'right' });
     y += 16;
 
-    pdfDoc.moveTo(390, y).lineTo(545, y).strokeColor(green).lineWidth(2).stroke();
+    pdfDoc.moveTo(390, y).lineTo(545, y).strokeColor(black).lineWidth(2).stroke();
     y += 10;
 
-    pdfDoc.rect(390, y, 155, 32).fillColor(green).fill();
-    pdfDoc.fontSize(13).fillColor('white').font('Helvetica-Bold')
+    pdfDoc.rect(390, y, 155, 32).fillColor(white).fill();
+    pdfDoc.fontSize(13).fillColor('black').font('Helvetica-Bold')
       .text('TOTAL:', 400, y + 10, { width: 60, align: 'left' })
       .fontSize(14).text(`€${total.toFixed(2)}`, 470, y + 10, { width: 65, align: 'right' });
     y += 45;
