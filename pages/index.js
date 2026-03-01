@@ -172,7 +172,7 @@ export default function Home() {
           borderBottom: '1px solid #E5E1D9',
           padding: '0 40px',
           display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          height: 80,
+          height: 90,
           position: 'sticky', top: 0, zIndex: 50,
           boxShadow: '0 1px 8px rgba(0,0,0,0.06)',
         }}>
