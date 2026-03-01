@@ -175,7 +175,7 @@ export default async function handler(req, res) {
     y += 16;
 
     pdfDoc.fillColor(medGray)
-      .text('Tax included (10%):', 380, y, { width: 70, align: 'right' })
+      .text('Tax included (10%):', 350, y, { width: 70, align: 'right' })
       .fillColor(gray).text('€0.00', 470, y, { width: 65, align: 'right' });
     y += 16;
 
