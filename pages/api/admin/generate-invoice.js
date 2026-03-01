@@ -137,7 +137,7 @@ export default async function handler(req, res) {
     pdfDoc.fontSize(12).fillColor(black).font('Helvetica-Bold').text('ORDER ITEMS:', 50, y);
     y += 22;
 
-    pdfDoc.moveTo(50, y).lineTo(545, y).strokeColor(green).lineWidth(1.5).stroke();
+    pdfDoc.moveTo(50, y).lineTo(545, y).strokeColor(black).lineWidth(1.5).stroke();
     y += 8;
     pdfDoc.fontSize(10).fillColor(black).font('Helvetica-Bold')
       .text('ITEM', 55, y)
@@ -145,7 +145,7 @@ export default async function handler(req, res) {
       .text('PRICE', 390, y, { width: 50, align: 'right' })
       .text('TOTAL', 470, y, { width: 65, align: 'right' });
     y += 15;
-    pdfDoc.moveTo(50, y).lineTo(545, y).strokeColor(green).lineWidth(1).stroke();
+    pdfDoc.moveTo(50, y).lineTo(545, y).strokeColor(black).lineWidth(1).stroke();
     y += 10;
 
     items.forEach((item, i) => {
@@ -164,7 +164,7 @@ export default async function handler(req, res) {
       }
     });
 
-    pdfDoc.moveTo(50, y).lineTo(545, y).strokeColor(green).lineWidth(1.5).stroke();
+    pdfDoc.moveTo(50, y).lineTo(545, y).strokeColor(black).lineWidth(1.5).stroke();
     y += 20;
 
     // Totals
@@ -179,10 +179,10 @@ export default async function handler(req, res) {
       .fillColor(gray).text('€0.00', 470, y, { width: 65, align: 'right' });
     y += 16;
 
-    pdfDoc.moveTo(390, y).lineTo(545, y).strokeColor(green).lineWidth(2).stroke();
+    pdfDoc.moveTo(390, y).lineTo(545, y).strokeColor(black).lineWidth(2).stroke();
     y += 10;
 
-    pdfDoc.rect(390, y, 155, 32).fillColor(green).fill();
+    pdfDoc.rect(390, y, 155, 32).fillColor(lightGray).fill();
     pdfDoc.fontSize(13).fillColor('white').font('Helvetica-Bold')
       .text('TOTAL:', 400, y + 10, { width: 60, align: 'left' })
       .fontSize(14).text(`€${total.toFixed(2)}`, 470, y + 10, { width: 65, align: 'right' });
