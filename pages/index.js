@@ -3,7 +3,7 @@ import { useState, useCallback, useMemo } from 'react';
 import { categories, products } from '../lib/products';
 
 const WA_NUMBER  = process.env.NEXT_PUBLIC_WHATSAPP_NUMBER || '49170123456';
-const STORE_NAME = process.env.NEXT_PUBLIC_STORE_NAME      || 'GreenHarvest';
+const STORE_NAME = process.env.NEXT_PUBLIC_STORE_NAME      || 'مواسم الخير';
 const LANGS      = ['DE', 'EN', 'AR', 'FR'];
 
 /* ─── Stars ─────────────────────────────────────────────────────── */
@@ -121,10 +121,10 @@ export default function Home() {
         .map(i => `  • ${i.name} x${i.qty} — €${(i.price * i.qty).toFixed(2)}`)
         .join('\n');
       const msg = encodeURIComponent(
-        `🌿 *New Order — ${STORE_NAME}*\nOrder: #${orderId}\n\n` +
-        `👤 *Name:* ${form.name}\n📞 *Phone:* ${form.phone}\n📍 *Address:* ${form.address}\n` +
-        (form.notes ? `📝 *Notes:* ${form.notes}\n` : '') +
-        `\n*Items:*\n${lines}\n\n💰 *Total: €${total.toFixed(2)}*\n💳 *Payment: Cash on Delivery*`
+        `🌿 *طلب جديد — ${STORE_NAME}*\nرقم الطلب: #${orderId}\n\n` +
+        `👤 *الاسم:* ${form.name}\n📞 *الهاتف:* ${form.phone}\n📍 *العنوان:* ${form.address}\n` +
+        (form.notes ? `📝 *ملاحظات:* ${form.notes}\n` : '') +
+        `\n*المنتجات:*\n${lines}\n\n💰 *المجموع: €${total.toFixed(2)}*\n💳 *الدفع: عند الاستلام*`
       );
       window.open(`https://wa.me/${WA_NUMBER}?text=${msg}`, '_blank');
       setPanelStep('success');
@@ -159,8 +159,8 @@ export default function Home() {
   return (
     <>
       <Head>
-        <title>{STORE_NAME} — Natural Products</title>
-        <meta name="description" content={`Order from ${STORE_NAME} — natural products delivered to your door`} />
+        <title>{STORE_NAME} — منتجات طبيعية</title>
+        <meta name="description" content={`اطلب من ${STORE_NAME} — منتجات طبيعية توصل لباب بيتك`} />
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
       </Head>
 
@@ -178,16 +178,20 @@ export default function Home() {
         }}>
           {/* Logo */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 11 }}>
-            <div style={{
-              width: 40, height: 40, background: '#1C4A2B', borderRadius: 11,
-              display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20,
-            }}>🌿</div>
+            <img 
+              src="/brand/logo17.png" 
+              alt="مواسم الخير"
+              style={{
+                width: 40, height: 40, borderRadius: 11,
+                objectFit: 'cover'
+              }}
+            />
             <div>
               <div style={{ fontSize: 22, fontWeight: 900, color: '#142019', letterSpacing: -0.5, lineHeight: 1.1 }}>
                 {STORE_NAME}
               </div>
               <div style={{ fontSize: 11.5, color: '#8A8478', fontWeight: 600 }}>
-                {products.length} natural products
+                {products.length} منتج طبيعي
               </div>
             </div>
           </div>
