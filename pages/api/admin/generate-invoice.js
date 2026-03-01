@@ -151,17 +151,6 @@ export default async function handler(req, res) {
     pdfDoc.moveTo(50, y).lineTo(545, y).strokeColor(black).lineWidth(2).stroke();
     y += 14;
 
-    // ============================
-    // SELLER CONTACT BLOCK (NEW)
-    // ============================
-    pdfDoc.fontSize(9).fillColor(medGray).font('Helvetica');
-
-    pdfDoc.text(`Seller Address: ${sellerAddress}`, 50, y);
-    pdfDoc.text(`Phone: ${sellerPhone}`, 50, y + 12);
-    pdfDoc.text(`Email: ${sellerEmail}`, 50, y + 24);
-    pdfDoc.text(`Returns/Complaints: ${returnsEmail}`, 50, y + 36);
-
-    y += 52;
 
     // Invoice header
     pdfDoc.fontSize(22).fillColor(black).font('Helvetica-Bold').text('INVOICE', 50, y);
