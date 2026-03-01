@@ -67,7 +67,7 @@ export default async function handler(req, res) {
       // If your PNG has whitespace, increase fit slightly (e.g. 58) or reduce padding below.
       const pad = 0; // set to 4 if you want breathing room
       pdfDoc.image(logoPath, logoX + pad, y + pad, {
-        fit: [logoSize - pad * 0.5, logoSize - pad * 0.5],
+        fit: [logoSize - pad * 1, logoSize - pad * 1],
         align: 'center',
         valign: 'center'
       });
