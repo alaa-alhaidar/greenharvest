@@ -81,13 +81,13 @@ export default async function handler(req, res) {
           logoX + logoSize/2 - 5,  y + logoSize/2 - 10,
           logoX + logoSize/2 + 15, y + logoSize/2 - 15
         )
-        .strokeColor(green).lineWidth(2.5).stroke();
+        .strokeColor(lightGray).lineWidth(2.5).stroke();
 
       [{ x: -12, y: 10, angle: -30 }, { x: -8, y: 5, angle: 30 }, { x: -4, y: 0, angle: -20 },
        { x: 0, y: -5, angle: 25 }, { x: 5, y: -8, angle: -25 }, { x: 10, y: -12, angle: 20 }]
         .forEach(leaf => {
           pdfDoc.save().translate(logoX + logoSize/2 + leaf.x, y + logoSize/2 + leaf.y).rotate(leaf.angle);
-          pdfDoc.ellipse(0, 0, 5, 2.5).fillColor(green).fill();
+          pdfDoc.ellipse(0, 0, 5, 2.5).fillColor(lightGray).fill();
           pdfDoc.restore();
         });
 
@@ -105,8 +105,8 @@ export default async function handler(req, res) {
 
     // Invoice header
     pdfDoc.fontSize(22).fillColor(black).font('Helvetica-Bold').text('INVOICE', 50, y);
-    pdfDoc.rect(400, y - 5, 145, 35).strokeColor(green).lineWidth(2).stroke();
-    pdfDoc.fontSize(18).fillColor(green).text(`#${doc.id.slice(-6).toUpperCase()}`, 400, y + 5, { width: 145, align: 'center' });
+    pdfDoc.rect(400, y - 5, 145, 35).strokeColor(black).lineWidth(2).stroke();
+    pdfDoc.fontSize(18).fillColor(lightGray).text(`#${doc.id.slice(-6).toUpperCase()}`, 400, y + 5, { width: 145, align: 'center' });
     y += 45;
 
     pdfDoc.fontSize(10).fillColor(gray).font('Helvetica')
