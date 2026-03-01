@@ -172,7 +172,7 @@ export default function Home() {
           borderBottom: '1px solid #E5E1D9',
           padding: '0 40px',
           display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          height: 72,
+          height: 80,
           position: 'sticky', top: 0, zIndex: 50,
           boxShadow: '0 1px 8px rgba(0,0,0,0.06)',
         }}>
@@ -182,7 +182,7 @@ export default function Home() {
               src="/brand/logo17.png" 
               alt="مواسم الخير"
               style={{
-                width: 40, height: 40, borderRadius: 10,
+                width: 50, height: 50, borderRadius: 10,
                 objectFit: 'cover'
               }}
             />
