@@ -10,17 +10,7 @@ let activeFilter = "all";
 let activePeriod = "30";
 
 const SESSION_KEY = "gh_admin_secret";
-// LOGIN check
-const res = await fetch("/api/admin/orders", {
-  method: "POST",
-  headers: { "x-admin-secret": input.value }
-});
 
-// LOAD orders
-const res2 = await fetch("/api/admin/orders", {
-  method: "POST",
-  headers: { "x-admin-secret": secret }
-});
 /* ── HELPERS ── */
 function $(id) { return document.getElementById(id); }
 
