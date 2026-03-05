@@ -10,10 +10,8 @@ let activePeriod = "30";
 
 const SESSION_KEY = "gh_admin_secret";
 
-/* ── HELPERS ── */
-function $(id) {
-  return document.getElementById(id);
-}
+/* ── DOM HELPERS ── */
+function $(id) { return document.getElementById(id); }
 
 function esc(s) {
   return String(s ?? "")
@@ -36,6 +34,14 @@ function getSecret() {
   return sessionStorage.getItem(SESSION_KEY) || "";
 }
 
+function setSecret(v) {
+  sessionStorage.setItem(SESSION_KEY, v);
+}
+
+function clearSecret() {
+  sessionStorage.removeItem(SESSION_KEY);
+}
+
 function calcTotal(o) {
   if (o?.total) return +o.total;
   return (o?.items || []).reduce((s, i) => s + (i.price || 0) * (i.qty || i.quantity || 1), 0);
@@ -54,31 +60,27 @@ function formatDate(iso) {
 function filterByPeriod(orders) {
   if (activePeriod === "all") return orders;
   const cutoff = Date.now() - Number(activePeriod) * 86400000;
-  return orders.filter((o) => (o.createdAt ? new Date(o.createdAt).getTime() >= cutoff : false));
+  return orders.filter(o => o.createdAt ? new Date(o.createdAt).getTime() >= cutoff : false);
 }
 
-/**
- * Robust fetch helper:
- * - Tries GET by default (or provided method)
- * - If server returns 405, retries with POST
- * - If expecting JSON, parses JSON; for non-JSON, returns Response
- */
-async function fetchJsonWith405Retry(url, options = {}) {
-  const first = await fetch(url, options);
+/* ── FETCH HELPERS ── */
+async function fetchJsonGET(url, secret) {
+  // IMPORTANT: your /api/admin/orders is GET-only
+  const res = await fetch(url, {
+    method: "GET",
+    headers: { "x-admin-secret": secret }
+  });
 
-  // If method not allowed, retry with POST (common for Next API routes)
-  if (first.status === 405) {
-    const retryOpts = { ...options, method: "POST" };
-    // If no body and method is POST, still fine; backend can ignore req.body.
-    const second = await fetch(url, retryOpts);
-    return second;
+  if (res.status === 403) {
+    const err = new Error("Forbidden");
+    err.status = 403;
+    throw err;
   }
-
-  return first;
-}
-
-async function fetchJsonOrThrow(url, options = {}) {
-  const res = await fetchJsonWith405Retry(url, options);
+  if (res.status === 405) {
+    const err = new Error("Method Not Allowed");
+    err.status = 405;
+    throw err;
+  }
   if (!res.ok) {
     const err = new Error(`Request failed: ${res.status}`);
     err.status = res.status;
@@ -87,167 +89,168 @@ async function fetchJsonOrThrow(url, options = {}) {
   return res.json();
 }
 
+async function fetchJsonPOST(url, secret, bodyObj) {
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-admin-secret": secret
+    },
+    body: JSON.stringify(bodyObj || {})
+  });
+
+  if (res.status === 403) {
+    const err = new Error("Forbidden");
+    err.status = 403;
+    throw err;
+  }
+  if (!res.ok) {
+    const err = new Error(`Request failed: ${res.status}`);
+    err.status = res.status;
+    throw err;
+  }
+  return res.json().catch(() => ({}));
+}
+
 /* ── AUTH ── */
+function showLogin() {
+  $("login-screen")?.classList.remove("hidden");
+  $("login-error")?.classList.remove("show");
+}
+
+function hideLogin() {
+  $("login-screen")?.classList.add("hidden");
+  $("login-error")?.classList.remove("show");
+}
+
 async function doLogin() {
   const input = $("psw-input");
   const err = $("login-error");
   const btn = $("login-btn");
-  if (!input || !btn || !err) return;
+  if (!input || !err || !btn) return;
 
   err.classList.remove("show");
   btn.disabled = true;
   btn.textContent = "Checking…";
 
+  const secret = input.value;
+
   try {
-    // IMPORTANT: some backends allow GET, others require POST => retry handles both
-    const res = await fetchJsonWith405Retry("/api/admin/orders", {
-      method: "POST", // start with POST to avoid 405 on strict routes
-      headers: { "x-admin-secret": input.value },
-    });
+    // LOGIN CHECK = GET /api/admin/orders (matches your backend)
+    const data = await fetchJsonGET("/api/admin/orders", secret);
 
-    if (!res.ok) {
-      input.value = "";
-      err.textContent =
-        res.status === 403
-          ? "Incorrect password. Please try again."
-          : res.status === 405
-          ? "Orders endpoint method not allowed (405). Check /api/admin/orders handler."
-          : "Server error. Check backend logs.";
-      err.classList.add("show");
-      btn.disabled = false;
-      btn.textContent = "Sign In";
-      input.focus();
-      return;
-    }
-
-    const data = await res.json();
-    sessionStorage.setItem(SESSION_KEY, input.value);
-
+    setSecret(secret);
     allOrders = data.orders || [];
-    $("login-screen")?.classList.add("hidden");
+
+    hideLogin();
     showToast(`Welcome — ${allOrders.length} orders loaded`);
 
     renderOrders();
     renderAnalytics();
   } catch (e) {
-    err.textContent = "Connection error. Try again.";
+    input.value = "";
+    err.textContent =
+      e.status === 403 ? "Incorrect password. Please try again."
+      : e.status === 405 ? "Server says 405. /api/admin/orders must allow GET."
+      : "Server error. Check backend logs.";
     err.classList.add("show");
+  } finally {
     btn.disabled = false;
     btn.textContent = "Sign In";
   }
 }
 
 function doLogout() {
-  sessionStorage.removeItem(SESSION_KEY);
+  clearSecret();
   allOrders = [];
   allCustomers = [];
   allInventory = [];
-  $("login-screen")?.classList.remove("hidden");
+  showLogin();
   const inp = $("psw-input");
   if (inp) inp.value = "";
   showToast("Logged out");
 }
 
-/* ── API LOADERS ── */
+/* ── LOADERS ── */
 async function loadOrders() {
   const secret = getSecret();
-  if (!secret) return;
+  if (!secret) return showLogin();
 
   try {
-    // Start with POST (fixes your 405), will still work if backend accepts POST
-    const data = await fetchJsonOrThrow("/api/admin/orders", {
-      method: "POST",
-      headers: { "x-admin-secret": secret },
-    });
-
+    const data = await fetchJsonGET("/api/admin/orders", secret);
     allOrders = data.orders || [];
     renderOrders();
     renderAnalytics();
     showToast(`Orders refreshed — ${allOrders.length} total`);
   } catch (e) {
-    if (e.status === 403) doLogout();
-    else showToast(`Error loading orders${e?.status ? ` (${e.status})` : ""}`);
+    if (e.status === 403) {
+      doLogout();
+      showToast("Session expired — please sign in again");
+      return;
+    }
+    showToast(`Error loading orders${e.status ? ` (${e.status})` : ""}`);
   }
 }
 
 async function loadCustomers() {
   const secret = getSecret();
-  if (!secret) return;
+  if (!secret) return showLogin();
 
   try {
-    // Try GET first (or your backend may require POST; 405 retry handles it)
-    const res = await fetchJsonWith405Retry("/api/admin/customers", {
-      method: "GET",
-      headers: { "x-admin-secret": secret },
-    });
-    if (res.status === 403) return doLogout();
-    if (!res.ok) throw Object.assign(new Error("Failed"), { status: res.status });
-
-    const data = await res.json();
+    const data = await fetchJsonGET("/api/admin/customers", secret);
     allCustomers = data.customers || [];
     renderCustomers();
     showToast(`Customers refreshed — ${allCustomers.length} total`);
   } catch (e) {
-    showToast(`Error loading customers${e?.status ? ` (${e.status})` : ""}`);
+    if (e.status === 403) return doLogout();
+    showToast(`Error loading customers${e.status ? ` (${e.status})` : ""}`);
   }
 }
 
 async function loadInventory() {
   const secret = getSecret();
-  if (!secret) return;
+  if (!secret) return showLogin();
 
   const subtitle = $("inventory-subtitle");
   if (subtitle) subtitle.textContent = "Loading…";
 
   try {
-    const res = await fetchJsonWith405Retry("/api/admin/inventory", {
-      method: "GET",
-      headers: { "x-admin-secret": secret },
-    });
-    if (res.status === 403) return doLogout();
-    if (!res.ok) throw Object.assign(new Error("Failed"), { status: res.status });
-
-    const data = await res.json();
+    const data = await fetchJsonGET("/api/admin/inventory", secret);
     allInventory = data.inventory || [];
     renderInventory();
     if (subtitle) subtitle.textContent = `${allInventory.length} products in catalog`;
     showToast("Inventory refreshed");
   } catch (e) {
     if (subtitle) subtitle.textContent = "Error loading data";
-    showToast(`Error loading inventory${e?.status ? ` (${e.status})` : ""}`);
+    if (e.status === 403) return doLogout();
+    showToast(`Error loading inventory${e.status ? ` (${e.status})` : ""}`);
   }
 }
 
 /* ── UPDATE STATUS ── */
 async function updateStatus(orderId, status) {
   const secret = getSecret();
-  if (!secret) return;
+  if (!secret) return showLogin();
 
   // optimistic UI
-  const o = allOrders.find((x) => x.id === orderId);
+  const o = allOrders.find(x => x.id === orderId);
   if (o) o.status = status;
   renderOrders();
   renderAnalytics();
 
   try {
-    const res = await fetchJsonWith405Retry("/api/admin/update-status", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-admin-secret": secret,
-      },
-      body: JSON.stringify({ orderId, status }),
-    });
-    showToast(res.ok ? `Status updated: ${status}` : `Update failed (${res.status})`);
+    await fetchJsonPOST("/api/admin/update-status", secret, { orderId, status });
+    showToast(`Status updated: ${status}`);
   } catch (e) {
-    showToast("Network error");
+    if (e.status === 403) return doLogout();
+    showToast(`Update failed${e.status ? ` (${e.status})` : ""}`);
   }
 }
 
 /* ── TABS ── */
 function showTab(tab) {
-  document.querySelectorAll(".tab-page").forEach((p) => p.classList.remove("active"));
-  document.querySelectorAll(".nav-item").forEach((b) => b.classList.remove("active"));
+  document.querySelectorAll(".tab-page").forEach(p => p.classList.remove("active"));
+  document.querySelectorAll(".nav-item").forEach(b => b.classList.remove("active"));
 
   $(`tab-${tab}`)?.classList.add("active");
   $(`nav-${tab}`)?.classList.add("active");
@@ -257,17 +260,17 @@ function showTab(tab) {
   if (tab === "inventory" && allInventory.length === 0) loadInventory();
 }
 
-/* ── FILTERS ── */
+/* ── FILTERS / PERIOD ── */
 function setFilter(filter) {
   activeFilter = filter;
-  document.querySelectorAll(".filter-tab").forEach((b) => b.classList.remove("active"));
+  document.querySelectorAll(".filter-tab").forEach(b => b.classList.remove("active"));
   document.querySelector(`.filter-tab[data-filter="${filter}"]`)?.classList.add("active");
   renderOrders();
 }
 
 function setPeriod(period) {
   activePeriod = period;
-  document.querySelectorAll(".period-btn").forEach((b) => b.classList.remove("active"));
+  document.querySelectorAll(".period-btn").forEach(b => b.classList.remove("active"));
   document.querySelector(`.period-btn[data-period="${period}"]`)?.classList.add("active");
   renderAnalytics();
 }
@@ -280,9 +283,10 @@ function renderOrders() {
   const search = ($("search-input")?.value || "").toLowerCase();
 
   let filtered = allOrders.slice();
-  if (activeFilter !== "all") filtered = filtered.filter((o) => o.status === activeFilter);
+  if (activeFilter !== "all") filtered = filtered.filter(o => o.status === activeFilter);
+
   if (search) {
-    filtered = filtered.filter((o) => {
+    filtered = filtered.filter(o => {
       const cust = o.customer || {};
       return (
         (o.shortId || "").toLowerCase().includes(search) ||
@@ -294,114 +298,108 @@ function renderOrders() {
   }
 
   $("order-count-label").textContent = `${allOrders.length} total orders`;
-  ["all", "new", "confirmed", "delivered", "cancelled"].forEach((s) => {
+  ["all", "new", "confirmed", "delivered", "cancelled"].forEach(s => {
     const el = $(`badge-${s}`);
     if (!el) return;
-    el.textContent = s === "all" ? allOrders.length : allOrders.filter((o) => o.status === s).length;
+    el.textContent = s === "all" ? allOrders.length : allOrders.filter(o => o.status === s).length;
   });
 
-  if (filtered.length === 0) {
+  if (!filtered.length) {
     grid.innerHTML = `<div class="section-card"><div class="section-sub">No orders found</div></div>`;
     return;
   }
 
-  grid.innerHTML = filtered
-    .map((o) => {
-      const cust = o.customer || {};
-      const total = calcTotal(o);
-      const shortId = o.shortId || String(o.id || "").slice(-6).toUpperCase();
-      const phone = String(cust.phone || "").replace(/\s/g, "").replace(/\+/g, "");
+  grid.innerHTML = filtered.map(o => {
+    const cust = o.customer || {};
+    const total = calcTotal(o);
+    const shortId = o.shortId || String(o.id || "").slice(-6).toUpperCase();
+    const phone = String(cust.phone || "").replace(/\s/g, "").replace(/\+/g, "");
 
-      const itemsRows = (o.items || [])
-        .map((i) => {
-          const qty = i.qty || i.quantity || 1;
-          return `<tr>
-            <td class="item-name">${esc(qty)}x ${esc(i.name || "Product")}</td>
-            <td class="item-price">€${((i.price || 0) * qty).toFixed(2)}</td>
-          </tr>`;
-        })
-        .join("");
+    const itemsRows = (o.items || []).map(i => {
+      const qty = i.qty || i.quantity || 1;
+      return `<tr>
+        <td class="item-name">${esc(qty)}x ${esc(i.name || "Product")}</td>
+        <td class="item-price">€${((i.price || 0) * qty).toFixed(2)}</td>
+      </tr>`;
+    }).join("");
 
-      const waMsg = encodeURIComponent(
-        `✅ مرحباً ${cust.name || ""}!\nتم تأكيد طلبك #${shortId} من مواسم الخير\nالمجموع: €${total.toFixed(
-          2
-        )}\nالدفع: عند الاستلام 💵\n\nشكراً لك! 🌿`
-      );
+    const canConfirm = o.status !== "confirmed" && o.status !== "delivered" && o.status !== "cancelled";
+    const canDeliver = o.status === "confirmed";
+    const canCancel = o.status !== "cancelled" && o.status !== "delivered";
 
-      const canConfirm = o.status !== "confirmed" && o.status !== "delivered" && o.status !== "cancelled";
-      const canDeliver = o.status === "confirmed";
-      const canCancel = o.status !== "cancelled" && o.status !== "delivered";
+    const waMsg = encodeURIComponent(
+      `✅ مرحباً ${cust.name || ""}!\nتم تأكيد طلبك #${shortId} من مواسم الخير\nالمجموع: €${total.toFixed(2)}\nالدفع: عند الاستلام 💵\n\nشكراً لك! 🌿`
+    );
 
-      return `<div class="order-card">
-        <div class="order-header">
-          <div>
-            <div class="order-id">#${esc(shortId)}</div>
-            <div class="order-date">${esc(formatDate(o.createdAt))}</div>
-          </div>
-          <div style="font-size:12px;color:#666;font-weight:700;">${esc(o.status || "new")}</div>
+    return `<div class="order-card">
+      <div class="order-header">
+        <div>
+          <div class="order-id">#${esc(shortId)}</div>
+          <div class="order-date">${esc(formatDate(o.createdAt))}</div>
+        </div>
+        <div style="font-size:12px;color:#666;font-weight:700;">${esc(o.status || "new")}</div>
+      </div>
+
+      <div class="order-body">
+        <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:10px;font-size:12.5px;color:#555;">
+          <div><strong>${esc(cust.name || "—")}</strong></div>
+          <div>${esc(cust.address || "—")}</div>
+          <div>${esc(cust.phone || "—")}</div>
         </div>
 
-        <div class="order-body">
-          <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:10px;font-size:12.5px;color:#555;">
-            <div><strong>${esc(cust.name || "—")}</strong></div>
-            <div>${esc(cust.address || "—")}</div>
-            <div>${esc(cust.phone || "—")}</div>
-          </div>
+        <table class="items-table">${itemsRows}</table>
+      </div>
 
-          <table class="items-table">${itemsRows}</table>
+      <div class="order-footer">
+        <div class="order-total">
+          <div class="total-label">Total</div>
+          <div class="total-value">€${total.toFixed(2)}</div>
         </div>
 
-        <div class="order-footer">
-          <div class="order-total">
-            <div class="total-label">Total</div>
-            <div class="total-value">€${total.toFixed(2)}</div>
-          </div>
-
-          <div style="display:flex;gap:8px;flex-wrap:wrap;">
-            ${phone ? `<button class="btn btn-whatsapp" data-wa="${esc(phone)}" data-msg="${esc(waMsg)}">WhatsApp</button>` : ``}
-            ${phone ? `<button class="btn btn-phone" data-tel="${esc(phone)}">Call</button>` : ``}
-            ${canConfirm ? `<button class="btn btn-confirm" data-action="confirm" data-id="${esc(o.id)}">✅ Confirm</button>` : ``}
-            ${canDeliver ? `<button class="btn btn-deliver" data-action="deliver" data-id="${esc(o.id)}">📦 Delivered</button>` : ``}
-            ${canCancel ? `<button class="btn btn-cancel" data-action="cancel" data-id="${esc(o.id)}">Cancel</button>` : ``}
-          </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          ${phone ? `<button class="btn btn-whatsapp" data-wa="${esc(phone)}" data-msg="${esc(waMsg)}">WhatsApp</button>` : ``}
+          ${phone ? `<button class="btn btn-phone" data-tel="${esc(phone)}">Call</button>` : ``}
+          ${canConfirm ? `<button class="btn btn-confirm" data-action="confirm" data-id="${esc(o.id)}">✅ Confirm</button>` : ``}
+          ${canDeliver ? `<button class="btn btn-deliver" data-action="deliver" data-id="${esc(o.id)}">📦 Delivered</button>` : ``}
+          ${canCancel ? `<button class="btn btn-cancel" data-action="cancel" data-id="${esc(o.id)}">Cancel</button>` : ``}
         </div>
-      </div>`;
-    })
-    .join("");
+      </div>
+    </div>`;
+  }).join("");
 
-  // event delegation
+  // Event delegation for dynamic buttons
   grid.onclick = (e) => {
-    const t = e.target.closest("button");
-    if (!t) return;
+    const btn = e.target.closest("button");
+    if (!btn) return;
 
-    if (t.classList.contains("btn-whatsapp")) {
-      const phone = t.getAttribute("data-wa");
-      const msg = t.getAttribute("data-msg");
+    if (btn.classList.contains("btn-whatsapp")) {
+      const phone = btn.getAttribute("data-wa");
+      const msg = btn.getAttribute("data-msg");
       window.open(`https://wa.me/${phone}?text=${msg}`, "_blank");
       return;
     }
-    if (t.classList.contains("btn-phone")) {
-      const phone = t.getAttribute("data-tel");
+    if (btn.classList.contains("btn-phone")) {
+      const phone = btn.getAttribute("data-tel");
       window.open(`tel:${phone}`);
       return;
     }
 
-    const id = t.getAttribute("data-id");
-    const action = t.getAttribute("data-action");
+    const id = btn.getAttribute("data-id");
+    const action = btn.getAttribute("data-action");
     if (!id || !action) return;
 
     if (action === "confirm") updateStatus(id, "confirmed");
     if (action === "deliver") updateStatus(id, "delivered");
     if (action === "cancel") updateStatus(id, "cancelled");
   };
-}
+};
 
 /* ── RENDER: ANALYTICS ── */
 function renderAnalytics() {
   const orders = filterByPeriod(allOrders);
 
   const totalRev = orders.reduce((s, o) => s + calcTotal(o), 0);
-  const delivered = orders.filter((o) => o.status === "delivered").length;
+  const delivered = orders.filter(o => o.status === "delivered").length;
   const rate = orders.length ? Math.round((delivered / orders.length) * 100) : 0;
   const avg = orders.length ? totalRev / orders.length : 0;
 
@@ -417,7 +415,7 @@ function renderAnalytics() {
 function buildTopProducts(orders) {
   const pm = {};
   for (const o of orders) {
-    for (const it of o.items || []) {
+    for (const it of (o.items || [])) {
       const k = it.name || "?";
       if (!pm[k]) pm[k] = { name: k, qty: 0, rev: 0 };
       const qty = it.qty || it.quantity || 1;
@@ -428,16 +426,13 @@ function buildTopProducts(orders) {
   const sorted = Object.values(pm).sort((a, b) => b.rev - a.rev).slice(0, 50);
 
   $("top-products-body").innerHTML =
-    sorted
-      .map(
-        (p, i) => `<tr>
-          <td class="cell-rank"><div class="rank-pill">${i + 1}</div></td>
-          <td><span class="prod-name">${esc(p.name)}</span></td>
-          <td>${p.qty}</td>
-          <td class="rev-val">€${p.rev.toFixed(2)}</td>
-        </tr>`
-      )
-      .join("") || `<tr><td colspan="4" style="padding:16px;color:#888;">No data</td></tr>`;
+    sorted.map((p, i) => `<tr>
+      <td class="cell-rank"><div class="rank-pill">${i + 1}</div></td>
+      <td><span class="prod-name">${esc(p.name)}</span></td>
+      <td>${p.qty}</td>
+      <td class="rev-val">€${p.rev.toFixed(2)}</td>
+    </tr>`).join("") ||
+    `<tr><td colspan="4" style="padding:16px;color:#888;">No data</td></tr>`;
 }
 
 function buildTopCustomers(orders) {
@@ -452,17 +447,14 @@ function buildTopCustomers(orders) {
   const sorted = Object.values(cm).sort((a, b) => b.total - a.total).slice(0, 200);
 
   $("customers-body").innerHTML =
-    sorted
-      .map(
-        (c, i) => `<tr>
-          <td class="cell-rank"><div class="rank-pill">${i + 1}</div></td>
-          <td><span class="prod-name">${esc(c.name)}</span></td>
-          <td class="cell-mono">${esc(c.phone || "—")}</td>
-          <td>${c.count} order${c.count !== 1 ? "s" : ""}</td>
-          <td class="rev-val" style="text-align:right">€${c.total.toFixed(2)}</td>
-        </tr>`
-      )
-      .join("") || `<tr><td colspan="5" style="padding:16px;color:#888;">No data</td></tr>`;
+    sorted.map((c, i) => `<tr>
+      <td class="cell-rank"><div class="rank-pill">${i + 1}</div></td>
+      <td><span class="prod-name">${esc(c.name)}</span></td>
+      <td class="cell-mono">${esc(c.phone || "—")}</td>
+      <td>${c.count} order${c.count !== 1 ? "s" : ""}</td>
+      <td class="rev-val" style="text-align:right">€${c.total.toFixed(2)}</td>
+    </tr>`).join("") ||
+    `<tr><td colspan="5" style="padding:16px;color:#888;">No data</td></tr>`;
 }
 
 /* ── RENDER: CUSTOMERS TAB ── */
@@ -471,42 +463,36 @@ function renderCustomers() {
   const tbody = $("customers-table-body");
   if (!tbody) return;
 
-  if (allCustomers.length === 0) {
+  if (!allCustomers.length) {
     tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;padding:40px;color:#999;">No customers yet</td></tr>`;
     return;
   }
 
-  tbody.innerHTML = allCustomers
-    .map((c, i) => {
-      const phone = String(c.phone || "").replace(/\s/g, "").replace(/\+/g, "");
-      const waMsg = encodeURIComponent(
-        `مرحباً ${c.name || ""}!\n\nشكراً لك لكونك عميلاً عزيزاً في مواسم الخير! 🌿\n\nأخبرنا إذا كنت بحاجة لأي شيء!`
-      );
+  tbody.innerHTML = allCustomers.map((c, i) => {
+    const phone = String(c.phone || "").replace(/\s/g, "").replace(/\+/g, "");
+    const waMsg = encodeURIComponent(
+      `مرحباً ${c.name || ""}!\n\nشكراً لك لكونك عميلاً عزيزاً في مواسم الخير! 🌿\n\nأخبرنا إذا كنت بحاجة لأي شيء!`
+    );
 
-      return `<tr>
-        <td class="cell-rank"><div class="rank-pill">${i + 1}</div></td>
-        <td><span class="prod-name">${esc(c.name || "Unknown")}</span></td>
-        <td class="cell-mono">${esc(c.phone || "—")}</td>
-        <td>${esc(c.address || "—")}</td>
-        <td>${Number(c.orderCount || 0)} order${Number(c.orderCount || 0) !== 1 ? "s" : ""}</td>
-        <td class="rev-val">€${Number(c.totalSpent || 0).toFixed(2)}</td>
-        <td style="text-align:right">
-          ${
-            phone
-              ? `<button class="btn btn-whatsapp" data-wa="${esc(phone)}" data-msg="${esc(waMsg)}" style="padding:6px 10px;font-size:11px;">Contact</button>`
-              : ""
-          }
-        </td>
-      </tr>`;
-    })
-    .join("");
+    return `<tr>
+      <td class="cell-rank"><div class="rank-pill">${i + 1}</div></td>
+      <td><span class="prod-name">${esc(c.name || "Unknown")}</span></td>
+      <td class="cell-mono">${esc(c.phone || "—")}</td>
+      <td>${esc(c.address || "—")}</td>
+      <td>${Number(c.orderCount || 0)} order${Number(c.orderCount || 0) !== 1 ? "s" : ""}</td>
+      <td class="rev-val">€${Number(c.totalSpent || 0).toFixed(2)}</td>
+      <td style="text-align:right">
+        ${phone ? `<button class="btn btn-whatsapp" data-wa="${esc(phone)}" data-msg="${esc(waMsg)}" style="padding:6px 10px;font-size:11px;">Contact</button>` : ""}
+      </td>
+    </tr>`;
+  }).join("");
 
   tbody.onclick = (e) => {
-    const t = e.target.closest("button");
-    if (!t) return;
-    if (t.classList.contains("btn-whatsapp")) {
-      const phone = t.getAttribute("data-wa");
-      const msg = t.getAttribute("data-msg");
+    const btn = e.target.closest("button");
+    if (!btn) return;
+    if (btn.classList.contains("btn-whatsapp")) {
+      const phone = btn.getAttribute("data-wa");
+      const msg = btn.getAttribute("data-msg");
       window.open(`https://wa.me/${phone}?text=${msg}`, "_blank");
     }
   };
@@ -522,68 +508,66 @@ function renderInventory() {
     return;
   }
 
-  tbody.innerHTML = allInventory
-    .map((p, i) => {
-      const stock = Number(p.stock || 0);
-      const rp = Number(p.reorderPoint || 0);
-      const status = p.status || (stock === 0 ? "out" : stock <= rp ? "low" : "ok");
-      const statusEmoji = status === "out" ? "❌" : status === "critical" ? "🔴" : status === "low" ? "⚠️" : "✅";
-      const statusText = status === "out" ? "Out of Stock" : status === "critical" ? "Critical" : status === "low" ? "Low Stock" : "In Stock";
-      const price = Number(p.price || 0).toFixed(2);
+  tbody.innerHTML = allInventory.map((p, i) => {
+    const stock = Number(p.stock || 0);
+    const rp = Number(p.reorderPoint || 0);
+    const status = p.status || (stock === 0 ? "out" : stock <= rp ? "low" : "ok");
+    const statusEmoji = status === "out" ? "❌" : status === "critical" ? "🔴" : status === "low" ? "⚠️" : "✅";
+    const statusText = status === "out" ? "Out of Stock" : status === "critical" ? "Critical" : status === "low" ? "Low Stock" : "In Stock";
+    const price = Number(p.price || 0).toFixed(2);
 
-      return `<tr>
-        <td style="color:#999;font-weight:600">${i + 1}</td>
-        <td><div style="font-weight:700;color:#1A1A1A">${esc(p.name || "")}</div>
-            <div style="font-size:11px;color:#999;margin-top:2px">${esc(p.unit || "")}</div></td>
-        <td style="font-family:monospace;font-size:11px;color:#666">${esc(p.sku || "-")}</td>
-        <td style="font-size:12px;color:#666">${esc(p.category || "-")}</td>
-        <td style="font-weight:800">${stock}</td>
-        <td><span style="font-size:16px">${statusEmoji}</span> <span style="font-size:12px;color:#666;font-weight:600">${esc(statusText)}</span></td>
-        <td style="font-weight:700">€${price}</td>
-        <td style="text-align:right;color:#999">—</td>
-      </tr>`;
-    })
-    .join("");
+    return `<tr>
+      <td style="color:#999;font-weight:600">${i + 1}</td>
+      <td><div style="font-weight:700;color:#1A1A1A">${esc(p.name || "")}</div>
+          <div style="font-size:11px;color:#999;margin-top:2px">${esc(p.unit || "")}</div></td>
+      <td style="font-family:monospace;font-size:11px;color:#666">${esc(p.sku || "-")}</td>
+      <td style="font-size:12px;color:#666">${esc(p.category || "-")}</td>
+      <td style="font-weight:800">${stock}</td>
+      <td><span style="font-size:16px">${statusEmoji}</span> <span style="font-size:12px;color:#666;font-weight:600">${esc(statusText)}</span></td>
+      <td style="font-weight:700">€${price}</td>
+      <td style="text-align:right;color:#999">—</td>
+    </tr>`;
+  }).join("");
 }
 
-/* ── WIRE UI ── */
+/* ── INIT / WIRE UI ── */
 document.addEventListener("DOMContentLoaded", () => {
-  // Login
+  // login
   $("login-btn")?.addEventListener("click", doLogin);
-  $("psw-input")?.addEventListener("keydown", (e) => {
-    if (e.key === "Enter") doLogin();
-  });
+  $("psw-input")?.addEventListener("keydown", (e) => { if (e.key === "Enter") doLogin(); });
 
-  // Logout
+  // logout
   $("logout-btn")?.addEventListener("click", doLogout);
 
-  // Tabs
-  document.querySelectorAll(".nav-item[data-tab]").forEach((btn) => {
+  // tabs
+  document.querySelectorAll(".nav-item[data-tab]").forEach(btn => {
     btn.addEventListener("click", () => showTab(btn.getAttribute("data-tab")));
   });
 
-  // Period
-  document.querySelectorAll(".period-btn").forEach((btn) => {
+  // period
+  document.querySelectorAll(".period-btn").forEach(btn => {
     btn.addEventListener("click", () => setPeriod(btn.getAttribute("data-period")));
   });
 
-  // Filters
-  document.querySelectorAll(".filter-tab[data-filter]").forEach((btn) => {
+  // filters
+  document.querySelectorAll(".filter-tab[data-filter]").forEach(btn => {
     btn.addEventListener("click", () => setFilter(btn.getAttribute("data-filter")));
   });
 
-  // Refresh buttons
+  // refresh buttons
   $("orders-refresh-btn")?.addEventListener("click", loadOrders);
   $("customers-refresh-btn")?.addEventListener("click", loadCustomers);
   $("inventory-refresh-btn")?.addEventListener("click", loadInventory);
 
-  // Search
+  // search
   $("search-input")?.addEventListener("input", renderOrders);
 
-  // Auto-login if session exists
+  // auto-session
   const saved = getSecret();
   if (saved) {
-    $("login-screen")?.classList.add("hidden");
+    hideLogin();
     loadOrders();
+  } else {
+    showLogin();
   }
 });
