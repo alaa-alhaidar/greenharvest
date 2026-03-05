@@ -2,8 +2,8 @@
 // Place order endpoint with automatic stock deduction
 // Protected by API_SECRET
 
-import { db } from '../../lib/firebase-admin';
-import { products } from '../../lib/products';
+import { db } from '../../../lib/firebase-admin';
+import { products } from '../../../lib/products';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
