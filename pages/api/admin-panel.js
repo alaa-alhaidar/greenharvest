@@ -5,6 +5,17 @@
 export default function handler(req, res) {
   res.setHeader("Content-Type", "text/html; charset=utf-8");
   res.setHeader("X-Robots-Tag", "noindex, nofollow");
+  res.setHeader(
+  "Content-Security-Policy",
+  [
+    "default-src 'self'",
+    "img-src 'self' data: https:",
+    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+    "font-src https://fonts.gstatic.com",
+    "script-src 'self' 'unsafe-inline'",   // <-- this is the key for inline <script> + onclick
+    "frame-ancestors 'none'",
+  ].join("; ")
+);
   res.status(200).send(`<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -1159,7 +1170,20 @@ if (saved) {
   document.getElementById('login-screen').classList.add('hidden');
   loadOrders();
 }
-
+window.doLogin = doLogin;
+window.doLogout = doLogout;
+window.togglePsw = togglePsw;
+window.showTab = showTab;
+window.setFilter = setFilter;
+window.setPeriod = setPeriod;
+window.setTimeSeg = setTimeSeg;
+window.loadOrders = loadOrders;
+window.updateStatus = updateStatus;
+window.loadCustomers = loadCustomers;
+window.loadInventory = loadInventory;
+window.generateInvoice = generateInvoice;
+window.adjustStock = adjustStock;
+window.setStock = setStock;
 </script>
 </body>
 </html>
