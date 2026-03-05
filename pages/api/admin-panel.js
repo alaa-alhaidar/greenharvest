@@ -1,4 +1,4 @@
- // pages/api/admin-panel.js
+// pages/api/admin-panel.js
 // Serves the admin dashboard HTML directly.
 // Access at: yourapp.vercel.app/api/admin-panel
 
@@ -11,7 +11,7 @@ export default function handler(req, res) {
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 <meta name="robots" content="noindex, nofollow"/>
-<title>GreenHarvest · Admin</title>
+<title>مواسم الخير · لوحة التحكم</title>
 <link href="https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
 <style>
 :root {
@@ -197,10 +197,12 @@ body{font-family:'Sora',sans-serif;background:var(--off-white);color:var(--text-
   </div>
   <div class="login-box">
     <div class="login-logo">
-      <div class="logo-icon">🌿</div>
+      <div class="logo-icon">
+        <img src="/brand/logo17.png" alt="مواسم الخير" style="width: 60px; height: 60px; border-radius: 12px; border: 3px solid rgba(255,255,255,0.2);">
+      </div>
       <div class="login-logo-text">
-        <h1 style="font-size:18px;font-weight:800;color:#fff;letter-spacing:-.3px;">GreenHarvest</h1>
-        <span style="font-size:11px;color:rgba(255,255,255,.4);display:block;margin-top:1px;">Admin Dashboard</span>
+        <h1 style="font-size:18px;font-weight:800;color:#fff;letter-spacing:-.3px;">مواسم الخير</h1>
+        <span style="font-size:11px;color:rgba(255,255,255,.4);display:block;margin-top:1px;">MAWASEM AL-KHAIR</span>
       </div>
     </div>
     <div class="login-title">Welcome back</div>
@@ -231,8 +233,9 @@ body{font-family:'Sora',sans-serif;background:var(--off-white);color:var(--text-
 <!-- SIDEBAR -->
 <aside class="sidebar">
   <div class="sidebar-logo">
-    <h1>🌿 GreenHarvest</h1>
-    <span>Admin Dashboard</span>
+    <img src="/brand/logo17.png" alt="مواسم الخير" style="width: 50px; height: 50px; border-radius: 10px; margin-bottom: 8px;">
+    <h1 style="font-size: 16px; margin: 0;">مواسم الخير</h1>
+    <span>MAWASEM AL-KHAIR</span>
   </div>
   <nav class="sidebar-nav">
     <button class="nav-item active" id="nav-analytics" onclick="showTab('analytics')">
@@ -254,13 +257,23 @@ body{font-family:'Sora',sans-serif;background:var(--off-white);color:var(--text-
       </svg>
       <span>Customers</span>
     </button>
+
+    <!-- INVENTORY NAV -->
+    <button class="nav-item" id="nav-inventory" onclick="showTab('inventory')">
+      <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+        <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+        <polyline points="3.27 6.96 12 12.01 20.73 6.96"/>
+        <line x1="12" y1="22.08" x2="12" y2="12"/>
+      </svg>
+      <span>Inventory</span>
+    </button>
   </nav>
   <div style="padding:10px 12px 16px;border-top:1px solid rgba(255,255,255,.07);">
     <button class="logout-btn" onclick="doLogout()">
       <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
       <span>Logout</span>
     </button>
-    <div style="padding:8px 2px 0;font-size:11px;color:rgba(255,255,255,.2);">v2.0 · GreenHarvest</div>
+    <div style="padding:8px 2px 0;font-size:11px;color:rgba(255,255,255,.2);">v2.0 · مواسم الخير</div>
   </div>
 </aside>
 
@@ -380,6 +393,70 @@ body{font-family:'Sora',sans-serif;background:var(--off-white);color:var(--text-
               </tr>
             </thead>
             <tbody id="customers-table-body"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- INVENTORY TAB -->
+  <div class="tab-page" id="tab-inventory">
+    <div class="page-header">
+      <div>
+        <h2>Inventory Management</h2>
+        <p id="inventory-subtitle">Stock levels and alerts</p>
+      </div>
+      <button class="refresh-btn" onclick="loadInventory()">
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+          <polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/>
+          <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+        </svg>
+        Refresh
+      </button>
+    </div>
+
+    <!-- Summary Stats -->
+    <div class="stats-row">
+      <div class="stat-card revenue">
+        <div class="s-label">Total Products</div>
+        <div class="s-value" id="inv-total">0</div>
+        <div class="s-sub">in catalog</div>
+      </div>
+      <div class="stat-card new-c">
+        <div class="s-label">In Stock</div>
+        <div class="s-value" id="inv-instock">0</div>
+        <div class="s-sub">available</div>
+      </div>
+      <div class="stat-card confirmed">
+        <div class="s-label">Low Stock</div>
+        <div class="s-value" id="inv-lowstock">0</div>
+        <div class="s-sub">needs attention</div>
+      </div>
+      <div class="stat-card delivered">
+        <div class="s-label">Out of Stock</div>
+        <div class="s-value" id="inv-outofstock">0</div>
+        <div class="s-sub">unavailable</div>
+      </div>
+    </div>
+
+    <!-- Inventory Table -->
+    <div class="section-card">
+      <div class="table-shell">
+        <div class="table-scroll">
+          <table class="top-table">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Product</th>
+                <th>SKU</th>
+                <th>Category</th>
+                <th>Stock</th>
+                <th>Status</th>
+                <th>Price</th>
+                <th style="text-align:right">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="inventory-table-body"></tbody>
           </table>
         </div>
       </div>
@@ -552,6 +629,12 @@ function showTab(tab) {
   if (tab === 'customers' && allCustomers.length === 0) {
     loadCustomers();
   }
+
+  // Load inventory on first visit
+  if (tab === 'inventory' && !window.inventoryLoaded) {
+    loadInventory();
+    window.inventoryLoaded = true;
+  }
 }
 
 function setFilter(filter, btn) {
@@ -626,7 +709,7 @@ function renderOrders() {
     }).join('');
 
     var waMsg = encodeURIComponent(
-      '✅ Hello '+cust.name+'!\\nYour GreenHarvest order #'+shortId+' is confirmed!\\nTotal: €'+total.toFixed(2)+'\\nPayment: Cash on delivery 💵\\n\\nThank you! 🌿'
+      '✅ مرحباً '+cust.name+'!\\nتم تأكيد طلبك #'+shortId+' من مواسم الخير\\nالمجموع: €'+total.toFixed(2)+'\\nالدفع: عند الاستلام 💵\\n\\nشكراً لك! 🌿'
     );
 
     var actions = '';
@@ -809,7 +892,7 @@ function renderCustomers() {
   tbody.innerHTML = allCustomers.map(function(c, i) {
     var phone = (c.phone || '').replace(/\\s/g, '').replace('+', '');
     var waMsg = encodeURIComponent(
-      'Hello ' + c.name + '!\\n\\nThank you for being a valued GreenHarvest customer! 🌿\\n\\nWe hope you enjoyed your orders. Let us know if you need anything!'
+      'مرحباً ' + c.name + '!\\n\\nشكراً لك لكونك عميلاً عزيزاً في مواسم الخير! 🌿\\n\\nنتمنى أن تكون استمتعت بطلباتك. أخبرنا إذا كنت بحاجة لأي شيء!'
     );
 
     return '<tr>'
@@ -861,7 +944,7 @@ function generateInvoice(orderId) {
       var url = window.URL.createObjectURL(blob);
       var a = document.createElement('a');
       a.href = url;
-      a.download = 'GreenHarvest-Invoice-' + orderId.slice(-6).toUpperCase() + '.pdf';
+      a.download = 'MawasemAlKhair-Invoice-' + orderId.slice(-6).toUpperCase() + '.pdf';
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -879,6 +962,145 @@ function generateInvoice(orderId) {
         btn.disabled = false;
         btn.innerHTML = originalText;
       }
+    });
+}
+
+/* ── INVENTORY MANAGEMENT ── */
+var allInventory = [];
+
+function loadInventory() {
+  var secret = getSecret();
+  if (!secret) return;
+
+  document.getElementById('inventory-subtitle').textContent = 'Loading...';
+
+  fetch('/api/admin/inventory', {
+    headers: { 'x-admin-secret': secret }
+  })
+    .then(function(res) {
+      if (!res.ok) throw new Error('Failed');
+      return res.json();
+    })
+    .then(function(data) {
+      allInventory = data.inventory || [];
+      renderInventory(data.summary);
+      document.getElementById('inventory-subtitle').textContent = data.inventory.length + ' products in catalog';
+    })
+    .catch(function(e) {
+      showToast('Error loading inventory: ' + e.message);
+      document.getElementById('inventory-subtitle').textContent = 'Error loading data';
+    });
+}
+
+function renderInventory(summary) {
+  // Update summary stats
+  document.getElementById('inv-total').textContent = summary.totalProducts || 0;
+  document.getElementById('inv-instock').textContent = summary.inStock || 0;
+  document.getElementById('inv-lowstock').textContent = summary.lowStock || 0;
+  document.getElementById('inv-outofstock').textContent = summary.outOfStock || 0;
+
+  // Render table
+  var tbody = document.getElementById('inventory-table-body');
+  if (!allInventory.length) {
+    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:40px;color:#999">No products found</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = allInventory.map(function(p, i) {
+    var statusEmoji = p.status === 'out' ? '❌' : p.status === 'critical' ? '🔴' : p.status === 'low' ? '⚠️' : '✅';
+    var statusText = p.status === 'out' ? 'Out of Stock' : p.status === 'critical' ? 'Critical' : p.status === 'low' ? 'Low Stock' : 'In Stock';
+    var statusColor = p.status === 'out' ? '#D32F2F' : p.status === 'critical' ? '#F57C00' : p.status === 'low' ? '#FBC02D' : '#388E3C';
+
+    return '<tr>'
+      + '<td style="color:#999;font-weight:600">' + (i + 1) + '</td>'
+      + '<td><div style="font-weight:700;color:#1A1A1A">' + p.name + '</div>'
+      + '<div style="font-size:11px;color:#999;margin-top:2px">' + (p.unit || '') + '</div></td>'
+      + '<td style="font-family:monospace;font-size:11px;color:#666">' + (p.sku || '-') + '</td>'
+      + '<td style="font-size:12px;color:#666">' + (p.category || '-') + '</td>'
+      + '<td><div style="display:inline-block;padding:4px 12px;background:' + (p.stock === 0 ? '#FFEBEE' : p.stock <= p.reorderPoint ? '#FFF3E0' : '#E8F5E9') + ';border-radius:6px;font-weight:800;font-size:13px;color:' + statusColor + '">' + p.stock + '</div></td>'
+      + '<td><span style="font-size:16px">' + statusEmoji + '</span> <span style="font-size:12px;color:' + statusColor + ';font-weight:600">' + statusText + '</span></td>'
+      + '<td style="font-weight:700">€' + p.price.toFixed(2) + '</td>'
+      + '<td style="text-align:right">'
+        + '<button class="btn" style="padding:6px 10px;font-size:11px;margin-right:4px" onclick="adjustStock(\'' + p.id + '\', \'add\')">'
+          + '<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2" style="width:12px;height:12px"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> Add'
+        + '</button>'
+        + '<button class="btn" style="padding:6px 10px;font-size:11px;margin-right:4px" onclick="adjustStock(\'' + p.id + '\', \'subtract\')">'
+          + '<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2" style="width:12px;height:12px"><line x1="5" y1="12" x2="19" y2="12"/></svg> Remove'
+        + '</button>'
+        + '<button class="btn btn-secondary" style="padding:6px 10px;font-size:11px" onclick="setStock(\'' + p.id + '\', ' + p.stock + ')">'
+          + '<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2" style="width:12px;height:12px"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg> Set'
+        + '</button>'
+      + '</td>'
+    + '</tr>';
+  }).join('');
+}
+
+function adjustStock(productId, action) {
+  var secret = getSecret();
+  if (!secret) return;
+
+  var quantity = 1;
+  
+  fetch('/api/admin/update-stock', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-admin-secret': secret
+    },
+    body: JSON.stringify({
+      productId: productId,
+      action: action,
+      quantity: quantity
+    })
+  })
+    .then(function(res) {
+      if (!res.ok) throw new Error('Failed');
+      return res.json();
+    })
+    .then(function(data) {
+      showToast('Stock updated: ' + data.previousStock + ' → ' + data.newStock);
+      loadInventory(); // Reload to show updated stock
+    })
+    .catch(function(e) {
+      showToast('Error updating stock: ' + e.message);
+    });
+}
+
+function setStock(productId, currentStock) {
+  var secret = getSecret();
+  if (!secret) return;
+
+  var newStock = prompt('Set stock level for this product:', currentStock);
+  if (newStock === null) return; // User cancelled
+
+  newStock = parseInt(newStock, 10);
+  if (isNaN(newStock) || newStock < 0) {
+    alert('Please enter a valid number (0 or greater)');
+    return;
+  }
+
+  fetch('/api/admin/update-stock', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-admin-secret': secret
+    },
+    body: JSON.stringify({
+      productId: productId,
+      action: 'set',
+      quantity: newStock
+    })
+  })
+    .then(function(res) {
+      if (!res.ok) throw new Error('Failed');
+      return res.json();
+    })
+    .then(function(data) {
+      showToast('Stock set to ' + data.newStock);
+      loadInventory(); // Reload
+    })
+    .catch(function(e) {
+      showToast('Error setting stock: ' + e.message);
     });
 }
 
@@ -937,6 +1159,7 @@ if (saved) {
   document.getElementById('login-screen').classList.add('hidden');
   loadOrders();
 }
+
 </script>
 </body>
 </html>
