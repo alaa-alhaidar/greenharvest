@@ -1,4 +1,4 @@
-// pages/api/admin/update-stock.js
+ // pages/api/admin/update-stock.js
 // Update product stock levels
 // Protected by ADMIN_SECRET
 

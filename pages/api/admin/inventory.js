@@ -1,4 +1,4 @@
-// pages/api/admin/inventory.js
+ // pages/api/admin/inventory.js
 // Fetch inventory data
 // Protected by ADMIN_SECRET
 
