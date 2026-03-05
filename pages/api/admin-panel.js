@@ -222,7 +222,7 @@ body{font-family:'Sora',sans-serif;background:var(--off-white);color:var(--text-
       <svg width="13" height="13" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
       <span id="login-error-msg">Incorrect password. Please try again.</span>
     </div>
-    <button class="login-btn" id="login-btn" onclick="window.doLogin()">
+    <button class="login-btn" id="login-btn" onclick="doLogin()">
       <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
       Sign In
     </button>
@@ -1159,10 +1159,7 @@ if (saved) {
   document.getElementById('login-screen').classList.add('hidden');
   loadOrders();
 }
-   // Make inline onclick handlers work reliably
-  window.doLogin = doLogin;
-  window.doLogout = doLogout;
-  window.togglePsw = togglePsw;
+
 </script>
 </body>
 </html>
