@@ -1,4 +1,4 @@
- // pages/api/admin-panel.js
+// pages/api/admin-panel.js
 // Serves the admin dashboard HTML directly.
 // Access at: yourapp.vercel.app/api/admin-panel
 
