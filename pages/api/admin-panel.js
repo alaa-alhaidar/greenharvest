@@ -1159,7 +1159,6 @@ if (saved) {
   document.getElementById('login-screen').classList.add('hidden');
   loadOrders();
 }
-
 </script>
 </body>
 </html>
