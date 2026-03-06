@@ -1,4 +1,4 @@
- console.log("✅ Admin Panel JavaScript v3.0 Loading...");
+console.log("✅ Admin Panel v4.0 - ULTRA FIX");
 
 let allOrders = [];
 let allCustomers = [];
@@ -27,7 +27,7 @@ function clearSecret() { sessionStorage.removeItem(SESSION_KEY); }
 
 function calcTotal(o) {
   if (o?.total) return +o.total;
-  return (o?.items || []).reduce((s,i) => s + (i.price||0) * (i.qty||i.quantity||1), 0);
+  return (o?.items || []).reduce((s,i) => s + (i.price||i.priceEach||0) * (i.qty||i.quantity||1), 0);
 }
 
 function formatDate(iso) {
@@ -42,6 +42,32 @@ function filterByPeriod(orders) {
   return orders.filter(o => o.createdAt ? new Date(o.createdAt).getTime() >= cutoff : false);
 }
 
+// COMPREHENSIVE customer extraction
+function getCustomerData(order) {
+  console.log("🔍 Extracting customer from:", order);
+  
+  const cust = order.customer || {};
+  
+  // Try ALL possible field names
+  const name = cust.name || order.customerName || order.name || 
+                cust.fullName || order.fullName || 
+                cust.customerName || "—";
+                
+  const phone = cust.phone || order.customerPhone || order.phone || 
+                cust.phoneNumber || order.phoneNumber ||
+                cust.mobile || order.mobile || "—";
+                
+  const address = cust.address || order.customerAddress || order.address ||
+                  cust.location || order.location ||
+                  cust.deliveryAddress || order.deliveryAddress || "—";
+                  
+  const notes = cust.notes || order.customerNotes || order.note || order.notes || "";
+  
+  const result = { name, phone, address, notes };
+  console.log("👤 Extracted:", result);
+  return result;
+}
+
 async function fetchJSON(url, method, secret, body) {
   const opts = {
     method,
@@ -53,62 +79,62 @@ async function fetchJSON(url, method, secret, body) {
   }
   const res = await fetch(url, opts);
   if (res.status === 403) { const err = new Error("Forbidden"); err.status = 403; throw err; }
-  if (!res.ok) { const err = new Error("Request failed: " + res.status); err.status = res.status; throw err; }
+  if (!res.ok) { const err = new Error("Failed: " + res.status); err.status = res.status; throw err; }
   return res.json().catch(() => ({}));
 }
 
 function showLogin() {
   $("login-screen")?.classList.remove("hidden");
-  $("login-error")?.classList.remove("show");
 }
 
 function hideLogin() {
   $("login-screen")?.classList.add("hidden");
-  $("login-error")?.classList.remove("show");
 }
 
 async function doLogin() {
-  console.log("🔵 doLogin called");
   const input = $("psw-input");
   const err = $("login-error");
   const btn = $("login-btn");
-  if (!input || !err || !btn) return;
+  if (!input) return;
 
-  err.classList.remove("show");
-  btn.disabled = true;
-  btn.textContent = "Checking…";
+  if (err) err.classList.remove("show");
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = "Checking…";
+  }
 
   try {
     const data = await fetchJSON("/api/admin/orders", "GET", input.value);
-    console.log("✅ Orders loaded:", data.orders?.length);
+    console.log("✅ Orders loaded:", data);
 
     setSecret(input.value);
     allOrders = data.orders || [];
 
     hideLogin();
-    showToast(`Welcome — ${allOrders.length} orders loaded`);
+    showToast(`Welcome — ${allOrders.length} orders`);
 
     renderOrders();
     renderAnalytics();
   } catch (e) {
     console.error("❌ Login error:", e);
     input.value = "";
-    err.textContent = e.status === 403 ? "Incorrect password." : "Server error.";
-    err.classList.add("show");
+    if (err) {
+      err.textContent = e.status === 403 ? "Incorrect password" : "Server error";
+      err.classList.add("show");
+    }
   } finally {
-    btn.disabled = false;
-    btn.textContent = "Sign In";
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = "Sign In";
+    }
   }
 }
 
 function doLogout() {
   clearSecret();
   allOrders = [];
-  allCustomers = [];
-  allInventory = [];
   showLogin();
-  $("psw-input").value = "";
-  showToast("Logged out");
+  if ($("psw-input")) $("psw-input").value = "";
 }
 
 async function loadOrders() {
@@ -120,10 +146,10 @@ async function loadOrders() {
     allOrders = data.orders || [];
     renderOrders();
     renderAnalytics();
-    showToast(`Orders refreshed — ${allOrders.length} total`);
+    showToast(`Refreshed — ${allOrders.length} orders`);
   } catch (e) {
     if (e.status === 403) { doLogout(); return; }
-    showToast("Error loading orders");
+    showToast("Error loading");
   }
 }
 
@@ -135,10 +161,8 @@ async function loadCustomers() {
     const data = await fetchJSON("/api/admin/customers", "GET", secret);
     allCustomers = data.customers || [];
     renderCustomers();
-    showToast(`Customers refreshed — ${allCustomers.length} total`);
   } catch (e) {
     if (e.status === 403) return doLogout();
-    showToast("Error loading customers");
   }
 }
 
@@ -146,25 +170,18 @@ async function loadInventory() {
   const secret = getSecret();
   if (!secret) return showLogin();
 
-  const subtitle = $("inventory-subtitle");
-  if (subtitle) subtitle.textContent = "Loading…";
-
   try {
     const data = await fetchJSON("/api/admin/inventory", "GET", secret);
     allInventory = data.inventory || [];
     renderInventory(data.summary || {});
-    if (subtitle) subtitle.textContent = `${allInventory.length} products`;
-    showToast("Inventory loaded");
   } catch (e) {
-    if (subtitle) subtitle.textContent = "Error";
     if (e.status === 403) return doLogout();
-    showToast("Error loading inventory");
   }
 }
 
 async function updateStatus(orderId, status) {
   const secret = getSecret();
-  if (!secret) return showLogin();
+  if (!secret) return;
 
   const o = allOrders.find(x => x.id === orderId);
   if (o) o.status = status;
@@ -173,26 +190,21 @@ async function updateStatus(orderId, status) {
 
   try {
     await fetchJSON("/api/admin/update-status", "POST", secret, { orderId, status });
-    showToast(`Status: ${status}`);
   } catch (e) {
-    if (e.status === 403) return doLogout();
-    showToast("Update failed");
+    if (e.status === 403) doLogout();
   }
 }
 
 async function generateInvoice(orderId) {
   const secret = getSecret();
-  if (!secret) return showLogin();
+  if (!secret) return;
 
-  showToast("Generating invoice...");
+  showToast("Generating...");
 
   try {
     const res = await fetch("/api/admin/generate-invoice", {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-admin-secret": secret
-      },
+      headers: { "Content-Type": "application/json", "x-admin-secret": secret },
       body: JSON.stringify({ orderId })
     });
 
@@ -202,16 +214,15 @@ async function generateInvoice(orderId) {
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `MawasemAlKhair-Invoice-${orderId.slice(-6).toUpperCase()}.pdf`;
+    a.download = `Invoice-${orderId.slice(-6).toUpperCase()}.pdf`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
     window.URL.revokeObjectURL(url);
 
-    showToast("Invoice downloaded!");
+    showToast("Downloaded!");
   } catch (e) {
-    if (e.status === 403) return doLogout();
-    showToast("Invoice generation failed");
+    showToast("Invoice failed");
   }
 }
 
@@ -242,8 +253,6 @@ function setPeriod(period, btn) {
 }
 
 function renderOrders() {
-  console.log("📊 Rendering orders:", allOrders.length);
-  
   const grid = $("orders-grid");
   const loading = $("loading-indicator");
   if (!grid) return;
@@ -257,26 +266,22 @@ function renderOrders() {
 
   if (search) {
     filtered = filtered.filter(o => {
-      const cust = o.customer || {};
-      const custName = cust.name || o.customerName || "";
-      const custPhone = cust.phone || o.customerPhone || "";
-      const custAddress = cust.address || o.customerAddress || "";
-      
+      const cust = getCustomerData(o);
       return (
         (o.shortId || "").toLowerCase().includes(search) ||
-        custName.toLowerCase().includes(search) ||
-        custPhone.toLowerCase().includes(search) ||
-        custAddress.toLowerCase().includes(search)
+        cust.name.toLowerCase().includes(search) ||
+        cust.phone.toLowerCase().includes(search) ||
+        cust.address.toLowerCase().includes(search)
       );
     });
   }
 
   // Update stats
   const totalRev = allOrders.reduce((s, o) => s + calcTotal(o), 0);
-  $("stat-revenue").textContent = "€" + totalRev.toFixed(2);
-  $("stat-new").textContent = allOrders.filter(o => o.status === "new").length;
-  $("stat-confirmed").textContent = allOrders.filter(o => o.status === "confirmed").length;
-  $("stat-delivered").textContent = allOrders.filter(o => o.status === "delivered").length;
+  if ($("stat-revenue")) $("stat-revenue").textContent = "€" + totalRev.toFixed(2);
+  if ($("stat-new")) $("stat-new").textContent = allOrders.filter(o => o.status === "new").length;
+  if ($("stat-confirmed")) $("stat-confirmed").textContent = allOrders.filter(o => o.status === "confirmed").length;
+  if ($("stat-delivered")) $("stat-delivered").textContent = allOrders.filter(o => o.status === "delivered").length;
 
   ["all","new","confirmed","delivered","cancelled"].forEach(s => {
     const el = $(`badge-${s}`);
@@ -284,24 +289,18 @@ function renderOrders() {
     el.textContent = s === "all" ? allOrders.length : allOrders.filter(o => o.status === s).length;
   });
 
-  $("order-count-label").textContent = `${allOrders.length} total orders`;
+  if ($("order-count-label")) $("order-count-label").textContent = `${allOrders.length} total orders`;
 
   if (!filtered.length) {
-    grid.innerHTML = `<div class="empty-state"><div class="emoji">📋</div><h3>No orders found</h3></div>`;
+    grid.innerHTML = `<div class="empty-state"><div class="emoji">📋</div><h3>No orders</h3></div>`;
     return;
   }
 
   grid.innerHTML = filtered.map(o => {
-    // FIXED: Handle both data structures
-    const cust = o.customer || {};
-    const custName = cust.name || o.customerName || "—";
-    const custPhone = cust.phone || o.customerPhone || "—";
-    const custAddress = cust.address || o.customerAddress || "—";
-    const custNotes = cust.notes || o.customerNotes || o.note || "";
-    
+    const cust = getCustomerData(o);
     const total = calcTotal(o);
     const shortId = o.shortId || String(o.id || "").slice(-6).toUpperCase();
-    const phone = String(custPhone || "").replace(/\s/g, "").replace(/\+/g, "");
+    const phone = String(cust.phone || "").replace(/\s/g, "").replace(/\+/g, "");
 
     const itemsRows = (o.items || []).map(i => {
       const qty = i.qty || i.quantity || 1;
@@ -321,9 +320,7 @@ function renderOrders() {
       cancelled: `<span class="status-badge cancelled">❌ Cancelled</span>`
     };
 
-    const waMsg = encodeURIComponent(
-      `✅ مرحباً ${custName}!\nتم تأكيد طلبك #${shortId} من مواسم الخير\nالمجموع: €${total.toFixed(2)}\nالدفع: عند الاستلام 💵\n\nشكراً لك! 🌿`
-    );
+    const waMsg = encodeURIComponent(`✅ مرحباً ${cust.name}!\nتم تأكيد طلبك #${shortId}\n€${total.toFixed(2)}`);
 
     return `<div class="order-card">
       <div class="order-header">
@@ -338,17 +335,17 @@ function renderOrders() {
         <div class="customer-info">
           <div class="field">
             <svg width="13" height="13" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-            <strong>${esc(custName)}</strong>
+            <strong>${esc(cust.name)}</strong>
           </div>
           <div class="field">
             <svg width="13" height="13" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
-            ${esc(custAddress)}
+            ${esc(cust.address)}
           </div>
           <div class="field">
             <svg width="13" height="13" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.36 12 19.79 19.79 0 0 1 1.21 3.18A2 2 0 0 1 3.18 1h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.15a16 16 0 0 0 8 8l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 24 17z"/></svg>
-            ${esc(custPhone)}
+            ${esc(cust.phone)}
           </div>
-          ${custNotes ? `<div class="field">📝 ${esc(custNotes)}</div>` : ""}
+          ${cust.notes ? `<div class="field">📝 ${esc(cust.notes)}</div>` : ""}
         </div>
 
         <table class="items-table">${itemsRows}</table>
@@ -362,18 +359,12 @@ function renderOrders() {
 
         <div class="order-actions">
           <button class="btn btn-invoice" onclick="generateInvoice('${esc(o.id)}')" style="background:var(--white);color:var(--green-mid);border:1px solid var(--stroke)">
-            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
             Invoice
           </button>
-          ${phone && phone !== "—" ? `<button class="btn btn-whatsapp" onclick="window.open('https://wa.me/${phone}?text=${waMsg}','_blank')">
-            <svg fill="currentColor" viewBox="0 0 24 24"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347zM12 0C5.373 0 0 5.373 0 12c0 2.093.541 4.063 1.487 5.779L0 24l6.371-1.471A11.94 11.94 0 0 0 12 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 21.818a9.818 9.818 0 0 1-5.013-1.371l-.36-.214-3.721.859.894-3.617-.235-.372A9.795 9.795 0 0 1 2.182 12C2.182 6.58 6.58 2.182 12 2.182S21.818 6.58 21.818 12 17.42 21.818 12 21.818z"/></svg>
-            WhatsApp
-          </button>` : ""}
-          ${phone && phone !== "—" ? `<button class="btn btn-phone" onclick="window.open('tel:${phone}')">
-            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.36 12 19.79 19.79 0 0 1 1.21 3.18A2 2 0 0 1 3.18 1h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.15a16 16 0 0 0 8 8l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 24 17z"/></svg>
-            Call
-          </button>` : ""}
-          ${o.status !== "confirmed" && o.status !== "delivered" && o.status !== "cancelled" ? `<button class="btn btn-confirm" onclick="updateStatus('${esc(o.id)}','confirmed')">✅ Confirm</button>` : ""}
+          ${phone && phone !== "—" ? `<button class="btn btn-whatsapp" onclick="window.open('https://wa.me/${phone}?text=${waMsg}','_blank')">WhatsApp</button>` : ""}
+          ${phone && phone !== "—" ? `<button class="btn btn-phone" onclick="window.open('tel:${phone}')">Call</button>` : ""}
+          ${o.status !== "confirmed" && o.status !== "delivered" ? `<button class="btn btn-confirm" onclick="updateStatus('${esc(o.id)}','confirmed')">✅ Confirm</button>` : ""}
           ${o.status === "confirmed" ? `<button class="btn btn-deliver" onclick="updateStatus('${esc(o.id)}','delivered')">📦 Delivered</button>` : ""}
           ${o.status !== "cancelled" && o.status !== "delivered" ? `<button class="btn btn-cancel" onclick="updateStatus('${esc(o.id)}','cancelled')">Cancel</button>` : ""}
         </div>
@@ -389,10 +380,36 @@ function renderAnalytics() {
   const rate = orders.length ? Math.round((delivered / orders.length) * 100) : 0;
   const avg = orders.length ? totalRev / orders.length : 0;
 
-  $("a-revenue").textContent = "€" + totalRev.toFixed(2);
-  $("a-orders").textContent = orders.length;
-  $("a-avg").textContent = "€" + avg.toFixed(2);
-  $("a-rate").textContent = rate + "%";
+  if ($("a-revenue")) $("a-revenue").textContent = "€" + totalRev.toFixed(2);
+  if ($("a-orders")) $("a-orders").textContent = orders.length;
+  if ($("a-avg")) $("a-avg").textContent = "€" + avg.toFixed(2);
+  if ($("a-rate")) $("a-rate").textContent = rate + "%";
+
+  // Calculate KPIs
+  const totalItems = orders.reduce((sum, o) => {
+    return sum + (o.items || []).reduce((s, i) => s + (i.qty || i.quantity || 1), 0);
+  }, 0);
+
+  const uniqueCustomers = new Set();
+  orders.forEach(o => {
+    const cust = getCustomerData(o);
+    if (cust.name !== "—") uniqueCustomers.add(cust.name);
+  });
+
+  const productMap = {};
+  orders.forEach(o => {
+    (o.items || []).forEach(i => {
+      const name = i.name || i.productName || "?";
+      const qty = i.qty || i.quantity || 1;
+      productMap[name] = (productMap[name] || 0) + qty;
+    });
+  });
+  
+  const topProduct = Object.entries(productMap).sort((a,b) => b[1] - a[1])[0];
+
+  if ($("kpi-items")) $("kpi-items").textContent = totalItems;
+  if ($("kpi-customers")) $("kpi-customers").textContent = uniqueCustomers.size;
+  if ($("kpi-top-product")) $("kpi-top-product").textContent = topProduct ? topProduct[0] : "—";
 
   buildTopProducts(orders);
   buildTopCustomers(allOrders);
@@ -410,99 +427,91 @@ function buildTopProducts(orders) {
       pm[k].rev += price * qty;
     }
   }
-  const sorted = Object.values(pm).sort((a,b) => b.rev - a.rev).slice(0,50);
+  const sorted = Object.values(pm).sort((a,b) => b.rev - a.rev);
 
-  $("top-products-body").innerHTML = sorted.map((p,i) => `<tr>
-    <td class="cell-rank"><div class="rank-pill">${i+1}</div></td>
-    <td><span class="prod-name">${esc(p.name)}</span></td>
-    <td>${p.qty}</td>
-    <td class="rev-val">€${p.rev.toFixed(2)}</td>
-  </tr>`).join("") || `<tr><td colspan="4" style="padding:16px;color:#888;">No data</td></tr>`;
+  if ($("top-products-body")) {
+    $("top-products-body").innerHTML = sorted.map((p,i) => `<tr>
+      <td class="cell-rank"><div class="rank-pill">${i+1}</div></td>
+      <td><span class="prod-name">${esc(p.name)}</span></td>
+      <td>${p.qty}</td>
+      <td class="rev-val">€${p.rev.toFixed(2)}</td>
+    </tr>`).join("") || `<tr><td colspan="4">No data</td></tr>`;
+  }
 }
 
 function buildTopCustomers(orders) {
   const cm = {};
   for (const o of orders) {
-    const cust = o.customer || {};
-    const k = cust.name || o.customerName || "Unknown";
-    if (!cm[k]) cm[k] = { name: k, total: 0, count: 0, phone: cust.phone || o.customerPhone || "" };
+    const cust = getCustomerData(o);
+    const k = cust.name;
+    if (k === "—") continue;
+    if (!cm[k]) cm[k] = { name: k, total: 0, count: 0, phone: cust.phone };
     cm[k].total += calcTotal(o);
     cm[k].count++;
   }
-  const sorted = Object.values(cm).sort((a,b) => b.total - a.total).slice(0,200);
+  const sorted = Object.values(cm).sort((a,b) => b.total - a.total);
 
-  $("customers-body").innerHTML = sorted.map((c,i) => `<tr>
-    <td class="cell-rank"><div class="rank-pill">${i+1}</div></td>
-    <td><span class="prod-name">${esc(c.name)}</span></td>
-    <td class="cell-mono">${esc(c.phone || "—")}</td>
-    <td>${c.count} order${c.count !== 1 ? "s" : ""}</td>
-    <td class="rev-val" style="text-align:right">€${c.total.toFixed(2)}</td>
-  </tr>`).join("") || `<tr><td colspan="5" style="padding:16px;color:#888;">No data</td></tr>`;
+  if ($("customers-body")) {
+    $("customers-body").innerHTML = sorted.map((c,i) => `<tr>
+      <td class="cell-rank"><div class="rank-pill">${i+1}</div></td>
+      <td><span class="prod-name">${esc(c.name)}</span></td>
+      <td class="cell-mono">${esc(c.phone || "—")}</td>
+      <td>${c.count} order${c.count !== 1 ? "s" : ""}</td>
+      <td class="rev-val" style="text-align:right">€${c.total.toFixed(2)}</td>
+    </tr>`).join("") || `<tr><td colspan="5">No data</td></tr>`;
+  }
 }
 
 function renderCustomers() {
-  $("customer-count-label").textContent = `${allCustomers.length} total customers`;
+  if ($("customer-count-label")) $("customer-count-label").textContent = `${allCustomers.length} customers`;
   const tbody = $("customers-table-body");
   if (!tbody) return;
 
   if (!allCustomers.length) {
-    tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;padding:40px;color:#999;">No customers yet</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;padding:40px">No customers</td></tr>`;
     return;
   }
 
   tbody.innerHTML = allCustomers.map((c,i) => {
     const phone = String(c.phone || "").replace(/\s/g, "").replace(/\+/g, "");
-    const waMsg = encodeURIComponent(`مرحباً ${c.name || ""}!\n\nشكراً لك لكونك عميلاً عزيزاً في مواسم الخير! 🌿`);
-
     return `<tr>
       <td class="cell-rank"><div class="rank-pill">${i+1}</div></td>
       <td><span class="prod-name">${esc(c.name || "Unknown")}</span></td>
       <td class="cell-mono">${esc(c.phone || "—")}</td>
       <td>${esc(c.address || "—")}</td>
-      <td>${Number(c.orderCount || 0)} order${Number(c.orderCount || 0) !== 1 ? "s" : ""}</td>
+      <td>${Number(c.orderCount || 0)}</td>
       <td class="rev-val">€${Number(c.totalSpent || 0).toFixed(2)}</td>
-      <td style="text-align:right">
-        ${phone && phone !== "—" ? `<button class="btn btn-whatsapp" onclick="window.open('https://wa.me/${phone}?text=${waMsg}','_blank')" style="padding:6px 10px;font-size:11px;">Contact</button>` : ""}
-      </td>
+      <td>${phone ? `<button class="btn btn-whatsapp" onclick="window.open('https://wa.me/${phone}','_blank')">Contact</button>` : ""}</td>
     </tr>`;
   }).join("");
 }
 
 function renderInventory(summary) {
-  $("inv-total").textContent = summary.totalProducts || 0;
-  $("inv-instock").textContent = summary.inStock || 0;
-  $("inv-lowstock").textContent = summary.lowStock || 0;
-  $("inv-outofstock").textContent = summary.outOfStock || 0;
+  if ($("inv-total")) $("inv-total").textContent = summary.totalProducts || 0;
+  if ($("inv-instock")) $("inv-instock").textContent = summary.inStock || 0;
+  if ($("inv-lowstock")) $("inv-lowstock").textContent = summary.lowStock || 0;
+  if ($("inv-outofstock")) $("inv-outofstock").textContent = summary.outOfStock || 0;
 
   const tbody = $("inventory-table-body");
   if (!tbody) return;
 
-  if (!allInventory.length) {
-    tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;padding:40px;color:#999;">No products</td></tr>`;
-    return;
-  }
-
   tbody.innerHTML = allInventory.map((p,i) => {
-    const stock = Number(p.stock || 0);
-    const statusEmoji = p.status === "out" ? "❌" : p.status === "critical" ? "🔴" : p.status === "low" ? "⚠️" : "✅";
-    const statusText = p.status === "out" ? "Out" : p.status === "critical" ? "Critical" : p.status === "low" ? "Low" : "Good";
-
+    const statusEmoji = p.status === "out" ? "❌" : p.status === "low" ? "⚠️" : "✅";
     return `<tr>
-      <td style="color:#999;font-weight:600">${i+1}</td>
-      <td><div style="font-weight:700">${esc(p.name || "")}</div>
-          <div style="font-size:11px;color:#999">${esc(p.unit || "")}</div></td>
-      <td style="font-family:monospace;font-size:11px">${esc(p.sku || "-")}</td>
+      <td>${i+1}</td>
+      <td>${esc(p.name || "")}</td>
+      <td>${esc(p.sku || "-")}</td>
       <td>${esc(p.category || "-")}</td>
-      <td style="font-weight:800">${stock}</td>
-      <td>${statusEmoji} ${esc(statusText)}</td>
-      <td style="font-weight:700">€${Number(p.price || 0).toFixed(2)}</td>
-      <td style="text-align:right">—</td>
+      <td>${p.stock || 0}</td>
+      <td>${statusEmoji}</td>
+      <td>€${Number(p.price || 0).toFixed(2)}</td>
+      <td>—</td>
     </tr>`;
-  }).join("");
+  }).join("") || `<tr><td colspan="8">No products</td></tr>`;
 }
 
 document.addEventListener("DOMContentLoaded", () => {
-  console.log("✅ Admin panel ready!");
+  console.log("✅ Dashboard ready");
   
   $("login-btn")?.addEventListener("click", doLogin);
   $("psw-input")?.addEventListener("keydown", e => { if (e.key === "Enter") doLogin(); });
@@ -515,5 +524,3 @@ document.addEventListener("DOMContentLoaded", () => {
     showLogin();
   }
 });
-
-console.log("✅ Admin Panel JavaScript v3.0 Loaded!");
