@@ -1,53 +1,81 @@
-// pages/api/admin/orders.js
-// Server-side only — fetches all orders from Firestore.
-// Protected by ADMIN_SECRET env var.
-// UPDATED: Removed orderBy to fix potential index issues
+ // pages/api/order.js
+// FIXED VERSION - Saves customer data properly
 
 import { db } from '../../lib/firebase-admin';
 
 export default async function handler(req, res) {
-  if (req.method !== "GET") {
-    res.setHeader("Allow", "GET");
-    return res.status(405).end("Method Not Allowed");
-  }
-
-  // Check admin secret
-  const secret = process.env.ADMIN_SECRET;
-  if (!secret || req.headers['x-admin-secret'] !== secret) {
-    return res.status(403).json({ error: 'Forbidden' });
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' });
   }
 
   try {
-    // Fetch without orderBy - just get all orders
-    const snapshot = await db
-      .collection('orders')
-      .limit(100)
-      .get();
+    const { items, customer, paymentMethod } = req.body;
 
-    const orders = snapshot.docs.map(doc => {
-      const data = doc.data();
-      return {
-        id:            doc.id,
-        shortId:       doc.id.slice(-6).toUpperCase(),
-        customer:      data.customer,
-        items:         data.items,
-        total:         data.total,
-        status:        data.status,
-        paymentMethod: data.paymentMethod,
-        createdAt:     data.createdAt?.toDate?.()?.toISOString() || null,
-      };
+    // Validate
+    if (!items || !items.length) {
+      return res.status(400).json({ error: 'No items provided' });
+    }
+
+    if (!customer || !customer.name || !customer.phone) {
+      return res.status(400).json({ error: 'Customer info required' });
+    }
+
+    // Calculate total
+    const total = items.reduce((sum, item) => {
+      return sum + (item.priceEach * item.quantity);
+    }, 0);
+
+    // Create order object
+    const orderData = {
+      // Customer info
+      customer: {
+        name: customer.name || '',
+        phone: customer.phone || '',
+        address: customer.address || '',
+        notes: customer.notes || ''
+      },
+      
+      // Items
+      items: items.map(item => ({
+        productId: item.productId,
+        productName: item.productName,
+        priceEach: item.priceEach,
+        quantity: item.quantity,
+        unit: item.unit || ''
+      })),
+      
+      // Order details
+      total,
+      status: 'new',
+      paymentMethod: paymentMethod || 'cash_on_delivery',
+      
+      // Timestamps
+      createdAt: new Date(),
+      updatedAt: new Date()
+    };
+
+    console.log('💾 Saving order:', orderData);
+
+    // Save to Firestore
+    const docRef = await db.collection('orders').add(orderData);
+
+    // Generate short ID
+    const shortId = docRef.id.slice(-6).toUpperCase();
+
+    console.log('✅ Order saved:', docRef.id);
+
+    return res.status(200).json({
+      success: true,
+      orderId: docRef.id,
+      shortId,
+      total
     });
 
-    // Sort by createdAt in JavaScript instead (newer first)
-    orders.sort((a, b) => {
-      if (!a.createdAt) return 1;
-      if (!b.createdAt) return -1;
-      return new Date(b.createdAt) - new Date(a.createdAt);
+  } catch (error) {
+    console.error('❌ Order creation error:', error);
+    return res.status(500).json({
+      error: 'Failed to create order',
+      details: error.message
     });
-
-    return res.status(200).json({ orders });
-  } catch (err) {
-    console.error('Admin fetch error:', err);
-    return res.status(500).json({ error: 'Failed to fetch orders', details: err.message });
   }
 }
