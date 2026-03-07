@@ -1,7 +1,5 @@
- // public/admin-panel.js
-// WORKS WITH YOUR EXACT DATA FORMAT
-
-console.log("✅ Admin Panel v6.0");
+// public/admin-panel.js - COMPLETE VERSION WITH CHART
+console.log("✅ Admin Panel v7.0 - With Chart Support");
 
 let allOrders = [];
 let allCustomers = [];
@@ -30,24 +28,44 @@ const getSecret = () => sessionStorage.getItem(SESSION_KEY) || "";
 const setSecret = (v) => sessionStorage.setItem(SESSION_KEY, v);
 const clearSecret = () => sessionStorage.removeItem(SESSION_KEY);
 
-// Extract customer - handles MISSING data
+// Match customer to order by phone or name
+const findCustomerForOrder = (order) => {
+  if (!allCustomers.length) return null;
+  
+  // Try exact order customer data first
+  if (order.customer) return order.customer;
+  if (order.customerName || order.customerPhone) {
+    return {
+      name: order.customerName,
+      phone: order.customerPhone,
+      address: order.customerAddress,
+      notes: order.customerNotes || order.notes
+    };
+  }
+  
+  // Try to match with customers collection
+  // This is a fallback - ideally customer data should be in the order
+  return null;
+};
+
 const extractCustomer = (o) => {
-  const c = o.customer || {};
-  
-  const name = c.name || o.customerName || o.name || "";
-  const phone = c.phone || o.customerPhone || o.phone || "";
-  const address = c.address || o.customerAddress || o.address || "";
-  const notes = c.notes || o.customerNotes || o.note || o.notes || "";
-  
-  // If ALL are empty, show warning
-  const hasCustomer = name || phone || address;
+  const matched = findCustomerForOrder(o);
+  if (matched && matched.name) {
+    return {
+      name: matched.name || "—",
+      phone: matched.phone || "—",
+      address: matched.address || "—",
+      notes: matched.notes || "",
+      missing: false
+    };
+  }
   
   return {
-    name: name || (hasCustomer ? "—" : "⚠️ No customer data"),
-    phone: phone || "—",
-    address: address || "—",
-    notes,
-    missing: !hasCustomer
+    name: "⚠️ No customer data",
+    phone: "—",
+    address: "—",
+    notes: "",
+    missing: true
   };
 };
 
@@ -72,7 +90,6 @@ const formatDate = (d) => {
 };
 
 const normalizeStatus = (status) => {
-  // Handle uppercase status from your data
   return (status || "new").toLowerCase();
 };
 
@@ -118,6 +135,14 @@ const doLogin = async () => {
     setSecret(inp.value);
     allOrders = data.orders || [];
     
+    // Also load customers
+    try {
+      const custData = await fetchAPI("/api/admin/customers", "GET");
+      allCustomers = custData.customers || [];
+    } catch (e) {
+      console.log("Couldn't load customers");
+    }
+    
     $("login-screen")?.classList.add("hidden");
     renderOrders();
     renderAnalytics();
@@ -138,6 +163,7 @@ const doLogin = async () => {
 const doLogout = () => {
   clearSecret();
   allOrders = [];
+  allCustomers = [];
   $("login-screen")?.classList.remove("hidden");
   $("psw-input").value = "";
 };
@@ -244,7 +270,6 @@ const renderOrders = () => {
   
   let filtered = [...allOrders];
   
-  // Normalize status for filtering
   if (activeFilter !== "all") {
     filtered = filtered.filter(o => normalizeStatus(o.status) === activeFilter);
   }
@@ -296,7 +321,6 @@ const renderOrders = () => {
     
     const waMsg = encodeURIComponent(`✅ مرحباً!\nطلبك #${shortId}\n€${total.toFixed(2)}`);
     
-    // Warning if customer data missing
     const customerWarning = c.missing ? `<div style="background:#FFF3E0;padding:8px 12px;border-radius:6px;font-size:11px;color:#F57C00;margin-bottom:8px;">⚠️ Customer data not saved - check your storefront order form!</div>` : '';
     
     return `<div class="order-card">
@@ -328,6 +352,8 @@ const renderOrders = () => {
     </div>`;
   }).join("");
 };
+
+let salesChart = null;
 
 const renderAnalytics = () => {
   const orders = filterByPeriod(allOrders);
@@ -363,6 +389,76 @@ const renderAnalytics = () => {
   
   buildTopProducts(orders);
   buildTopCustomers(allOrders);
+  renderSalesChart(orders);
+};
+
+const renderSalesChart = (orders) => {
+  const canvas = document.getElementById("sales-chart");
+  if (!canvas) return;
+  
+  // Simple canvas-based chart (no external library needed)
+  const ctx = canvas.getContext("2d");
+  canvas.width = canvas.offsetWidth;
+  canvas.height = 300;
+  
+  if (!orders.length) {
+    ctx.fillStyle = "#999";
+    ctx.font = "14px sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText("No data for selected period", canvas.width / 2, canvas.height / 2);
+    return;
+  }
+  
+  // Group by day
+  const dayMap = {};
+  orders.forEach(o => {
+    const date = new Date(o.createdAt || o.timestamp);
+    const day = date.toISOString().split('T')[0];
+    if (!dayMap[day]) dayMap[day] = 0;
+    dayMap[day] += calcTotal(o);
+  });
+  
+  const days = Object.keys(dayMap).sort();
+  const values = days.map(d => dayMap[d]);
+  const maxValue = Math.max(...values, 1);
+  
+  const padding = 40;
+  const chartWidth = canvas.width - padding * 2;
+  const chartHeight = canvas.height - padding * 2;
+  const barWidth = Math.max(chartWidth / days.length - 10, 20);
+  
+  // Draw bars
+  ctx.fillStyle = "#2A6041";
+  days.forEach((day, i) => {
+    const value = dayMap[day];
+    const barHeight = (value / maxValue) * chartHeight;
+    const x = padding + (i * (chartWidth / days.length));
+    const y = padding + chartHeight - barHeight;
+    
+    ctx.fillRect(x, y, barWidth, barHeight);
+    
+    // Label
+    ctx.fillStyle = "#666";
+    ctx.font = "10px sans-serif";
+    ctx.save();
+    ctx.translate(x + barWidth/2, canvas.height - 10);
+    ctx.rotate(-Math.PI/4);
+    ctx.textAlign = "right";
+    ctx.fillText(new Date(day).toLocaleDateString("en-GB", {day:"2-digit",month:"short"}), 0, 0);
+    ctx.restore();
+    
+    ctx.fillStyle = "#2A6041";
+  });
+  
+  // Y-axis labels
+  ctx.fillStyle = "#666";
+  ctx.font = "11px sans-serif";
+  ctx.textAlign = "right";
+  for (let i = 0; i <= 4; i++) {
+    const value = (maxValue / 4) * i;
+    const y = padding + chartHeight - (chartHeight / 4) * i;
+    ctx.fillText("€" + value.toFixed(0), padding - 10, y + 4);
+  }
 };
 
 const buildTopProducts = (orders) => {
@@ -458,4 +554,4 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 });
 
-console.log("✅ Admin Panel v6.0 Loaded - Handles missing customer data");
+console.log("✅ Admin Panel v7.0 Loaded - With Chart!");
