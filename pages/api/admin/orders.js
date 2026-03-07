@@ -1,5 +1,5 @@
- // pages/api/admin/orders.js
-// Fetches all orders - handles missing customer data
+// pages/api/admin/orders.js
+// Fixed version - handles missing createdAt field
 
 import { db } from '../../../lib/firebase-admin';
 
@@ -14,31 +14,38 @@ export default async function handler(req, res) {
   }
 
   try {
+    console.log('📦 Fetching all orders...');
+    
+    // DON'T use orderBy - it skips documents without that field!
+    // Just get ALL orders, we'll sort them in JavaScript
     const ordersSnap = await db.collection('orders')
-      .orderBy('createdAt', 'desc')
       .limit(500)
       .get();
+
+    console.log(`📊 Found ${ordersSnap.size} documents in Firestore`);
 
     const orders = [];
     
     ordersSnap.forEach(doc => {
       const data = doc.data();
       
-      console.log('📦 Raw order from Firestore:', doc.id, data);
+      console.log(`📄 Processing order ${doc.id}:`, {
+        hasCreatedAt: !!data.createdAt,
+        hasCustomer: !!data.customer,
+        hasCustomerName: !!data.customerName
+      });
       
-      // Extract customer - handle ALL possible formats
+      // Extract customer - handle ALL formats
       let customer = null;
       
       if (data.customer && typeof data.customer === 'object') {
-        // Format 1: Nested customer object
         customer = {
           name: data.customer.name || '',
           phone: data.customer.phone || '',
           address: data.customer.address || '',
           notes: data.customer.notes || ''
         };
-      } else if (data.customerName || data.customerPhone || data.customerAddress) {
-        // Format 2: Flat fields
+      } else if (data.customerName || data.customerPhone) {
         customer = {
           name: data.customerName || '',
           phone: data.customerPhone || '',
@@ -53,9 +60,13 @@ export default async function handler(req, res) {
         shortId: doc.id.slice(-6).toUpperCase(),
         status: (data.status || 'new').toLowerCase(),
         total: data.total || 0,
+        
+        // Handle missing createdAt gracefully
         createdAt: data.createdAt?.toDate?.()?.toISOString() || 
-                   data.timestamp || 
+                   data.timestamp?.toDate?.()?.toISOString() ||
+                   data.timestamp ||
                    new Date().toISOString(),
+        
         items: (data.items || []).map(item => ({
           productName: item.productName || item.name || '',
           priceEach: item.priceEach || item.price || 0,
@@ -64,16 +75,23 @@ export default async function handler(req, res) {
         }))
       };
       
-      // Only add customer if data exists
-      if (customer && (customer.name || customer.phone || customer.address)) {
+      // Add customer if exists
+      if (customer && (customer.name || customer.phone)) {
         order.customer = customer;
       }
       
       orders.push(order);
     });
 
+    // Sort by date in JavaScript (after fetching all)
+    orders.sort((a, b) => {
+      const dateA = new Date(a.createdAt).getTime();
+      const dateB = new Date(b.createdAt).getTime();
+      return dateB - dateA; // Newest first
+    });
+
     console.log(`✅ Returning ${orders.length} orders`);
-    
+
     return res.status(200).json({
       orders,
       count: orders.length
