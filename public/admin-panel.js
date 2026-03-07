@@ -1,5 +1,5 @@
-// FIXED VERSION - Shows customer data that exists
-console.log("✅ Admin Panel v8.0 - Final Fix");
+// Admin Panel - With Working Chart
+console.log("✅ Admin Panel v9.0 - With Chart");
 
 let allOrders = [];
 let allCustomers = [];
@@ -29,10 +29,7 @@ const setSecret = v => sessionStorage.setItem(SESSION_KEY, v);
 const clearSecret = () => sessionStorage.removeItem(SESSION_KEY);
 
 const extractCustomer = o => {
-  console.log("👤 Extracting customer from:", o);
-  
   if (o.customer && o.customer.name) {
-    console.log("✅ Has customer object:", o.customer);
     return {
       name: o.customer.name || "—",
       phone: o.customer.phone || "—",
@@ -43,7 +40,6 @@ const extractCustomer = o => {
   }
   
   if (o.customerName) {
-    console.log("✅ Has flat customer fields");
     return {
       name: o.customerName,
       phone: o.customerPhone || "—",
@@ -53,7 +49,6 @@ const extractCustomer = o => {
     };
   }
   
-  console.log("⚠️ No customer data found");
   return {
     name: "⚠️ No customer data",
     phone: "—",
@@ -125,7 +120,6 @@ const doLogin = async () => {
     if (!res.ok) throw new Error("Server error");
     
     const data = await res.json();
-    console.log("📦 Received orders:", data);
     
     setSecret(inp.value);
     allOrders = data.orders || [];
@@ -249,8 +243,6 @@ const setPeriod = (p, btn) => {
 };
 
 const renderOrders = () => {
-  console.log("📊 Rendering orders:", allOrders.length);
-  
   const grid = $("orders-grid");
   const loading = $("loading-indicator");
   if (!grid) return;
@@ -310,7 +302,7 @@ const renderOrders = () => {
     
     const waMsg = encodeURIComponent(`✅ مرحباً ${c.name}!\nطلبك #${shortId}\n€${total.toFixed(2)}`);
     
-    const customerWarning = c.missing ? `<div style="background:#FFF3E0;padding:8px 12px;border-radius:6px;font-size:11px;color:#F57C00;margin-bottom:8px;">⚠️ Customer data not saved - check your storefront order form!</div>` : '';
+    const customerWarning = c.missing ? `<div style="background:#FFF3E0;padding:8px 12px;border-radius:6px;font-size:11px;color:#F57C00;margin-bottom:8px;">⚠️ Customer data not saved</div>` : '';
     
     return `<div class="order-card">
       <div class="order-header">
@@ -340,11 +332,11 @@ const renderOrders = () => {
       </div>
     </div>`;
   }).join("");
-  
-  console.log("✅ Rendered", filtered.length, "orders");
 };
 
 const renderAnalytics = () => {
+  console.log("📊 Rendering analytics");
+  
   const orders = filterByPeriod(allOrders);
   const totalRev = orders.reduce((s, o) => s + calcTotal(o), 0);
   const delivered = orders.filter(o => normalizeStatus(o.status) === "delivered").length;
@@ -375,6 +367,103 @@ const renderAnalytics = () => {
   if ($("kpi-items")) $("kpi-items").textContent = totalItems;
   if ($("kpi-customers")) $("kpi-customers").textContent = uniqueCustomers.size;
   if ($("kpi-top-product")) $("kpi-top-product").textContent = topProd ? topProd[0] : "—";
+  
+  // Render the chart!
+  renderSalesChart(orders);
+};
+
+const renderSalesChart = (orders) => {
+  console.log("📈 Rendering sales chart with", orders.length, "orders");
+  
+  const canvas = document.getElementById("sales-chart");
+  if (!canvas) {
+    console.log("❌ Canvas not found");
+    return;
+  }
+  
+  const ctx = canvas.getContext("2d");
+  
+  // Set canvas size
+  canvas.width = canvas.offsetWidth || 800;
+  canvas.height = 300;
+  
+  console.log("Canvas size:", canvas.width, "x", canvas.height);
+  
+  // Clear canvas
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  
+  if (!orders.length) {
+    ctx.fillStyle = "#999";
+    ctx.font = "14px sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText("No data for selected period", canvas.width / 2, canvas.height / 2);
+    return;
+  }
+  
+  // Group orders by date
+  const dateMap = {};
+  orders.forEach(o => {
+    const date = new Date(o.createdAt || o.timestamp);
+    const dateStr = date.toISOString().split('T')[0]; // YYYY-MM-DD
+    if (!dateMap[dateStr]) dateMap[dateStr] = 0;
+    dateMap[dateStr] += calcTotal(o);
+  });
+  
+  const dates = Object.keys(dateMap).sort();
+  const values = dates.map(d => dateMap[d]);
+  
+  console.log("Chart data:", dates.length, "dates", values);
+  
+  if (!dates.length) {
+    ctx.fillStyle = "#999";
+    ctx.font = "14px sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText("No data", canvas.width / 2, canvas.height / 2);
+    return;
+  }
+  
+  const maxValue = Math.max(...values, 1);
+  const padding = 50;
+  const chartWidth = canvas.width - padding * 2;
+  const chartHeight = canvas.height - padding * 2;
+  const barWidth = Math.max(Math.min(chartWidth / dates.length - 10, 60), 20);
+  
+  console.log("Max value:", maxValue, "Bar width:", barWidth);
+  
+  // Draw bars
+  dates.forEach((date, i) => {
+    const value = dateMap[date];
+    const barHeight = (value / maxValue) * chartHeight;
+    const x = padding + (i * (chartWidth / dates.length));
+    const y = padding + chartHeight - barHeight;
+    
+    // Bar
+    ctx.fillStyle = "#2A6041";
+    ctx.fillRect(x, y, barWidth, barHeight);
+    
+    // Date label
+    ctx.fillStyle = "#666";
+    ctx.font = "10px sans-serif";
+    ctx.save();
+    ctx.translate(x + barWidth/2, canvas.height - padding + 20);
+    ctx.rotate(-Math.PI/4);
+    ctx.textAlign = "right";
+    const d = new Date(date);
+    ctx.fillText(d.toLocaleDateString("en-GB", {day:"2-digit",month:"short"}), 0, 0);
+    ctx.restore();
+  });
+  
+  // Y-axis labels
+  ctx.fillStyle = "#666";
+  ctx.font = "11px sans-serif";
+  ctx.textAlign = "right";
+  for (let i = 0; i <= 4; i++) {
+    const value = (maxValue / 4) * i;
+    const y = padding + chartHeight - (chartHeight / 4) * i;
+    ctx.fillText("€" + value.toFixed(0), padding - 10, y + 4);
+  }
+  
+  console.log("✅ Chart rendered");
 };
 
 const renderCustomers = () => {
@@ -427,4 +516,4 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 });
 
-console.log("✅ Admin Panel v8.0 Loaded");
+console.log("✅ Admin Panel v9.0 Loaded - With Chart!");
